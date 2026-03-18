@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>OyoSays — Messenger Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --I:#311B92;--Il:#4527A0;--Ip:#EDE7F6;
+  --C:#C44536;--Cl:#E8715F;--G:#FFB300;--Gd:#FF8F00;
+  --bg:#FCF9F0;--tx:#2C1810;--mu:#7B5E57;--gr:#2E7D32;
+  --bd:rgba(49,27,146,.10);--sh:0 2px 8px rgba(44,24,16,.08);
+  --r:16px;--rs:10px;
+  --fd:'Playfair Display',serif;--fb:'Outfit',sans-serif;
+  --nav:56px;--safe:env(safe-area-inset-bottom,0px);--hdr:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{font-family:var(--fb);background:var(--bg);color:var(--tx)}
+button{font-family:var(--fb);cursor:pointer;border:none;outline:none;background:none}
+input,textarea,select{font-family:var(--fb);outline:none;border:none;background:none}
+
+/* ─ AUTH GATE ─ */
+#gate{position:fixed;inset:0;z-index:999;background:var(--bg);display:flex;flex-direction:column;overflow-y:auto;max-width:480px;margin:0 auto}
+#gate.gone{display:none}
+.gh{background:linear-gradient(160deg,var(--I),var(--Il) 55%,#6A1B9A);padding:52px 28px 40px;position:relative;overflow:hidden}
+.gh::before{content:'';position:absolute;width:260px;height:260px;border-radius:50%;background:rgba(255,179,0,.07);top:-70px;right:-70px}
+.gh::after{content:'';position:absolute;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.04);bottom:-40px;left:-30px}
+.g-logo{font-family:var(--fd);font-size:40px;font-weight:900;font-style:italic;color:var(--G);position:relative;z-index:1}
+.g-logo b{color:#fff}
+.g-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(196,69,54,.25);border:1px solid rgba(196,69,54,.4);border-radius:50px;padding:6px 14px;margin-top:14px;font-size:12px;color:#ffcdd2;position:relative;z-index:1}
+.gbody{padding:28px 24px 48px}
+.gttl{font-family:var(--fd);font-size:22px;font-weight:700;color:var(--tx);margin-bottom:4px}
+.gsub{font-size:13px;color:var(--mu);margin-bottom:22px}
+.fl{font-size:12px;font-weight:600;color:var(--mu);margin-bottom:5px;display:block}
+.fi{width:100%;padding:13px 16px;border:1.5px solid var(--bd);border-radius:var(--rs);font-size:15px;color:var(--tx);background:#fff;transition:border-color .2s;margin-bottom:14px;display:block}
+.fi:focus{border-color:var(--I);box-shadow:0 0 0 3px rgba(49,27,146,.08)}
+.fi::placeholder{color:var(--mu)}
+.btnp{background:linear-gradient(135deg,var(--I),var(--Il));color:#fff;padding:15px 24px;border-radius:var(--rs);font-size:15px;font-weight:700;width:100%;box-shadow:0 4px 14px rgba(49,27,146,.3);transition:opacity .2s}
+.btnp:active{opacity:.85}
+.btnp:disabled{opacity:.45;pointer-events:none}
+.errmsg{display:none;padding:11px 14px;border-radius:var(--rs);font-size:13px;font-weight:500;margin-bottom:14px;background:#FDE8E6;border:1px solid #f5c6c1;color:var(--C)}
+.errmsg.on{display:block}
+
+/* ─ APP ─ */
+#app{position:fixed;inset:0;display:none;flex-direction:column;max-width:480px;margin:0 auto;background:var(--bg)}
+#app.show{display:flex}
+
+/* ─ TOPBAR ─ */
+.tbar{height:var(--hdr);background:linear-gradient(135deg,var(--I),var(--Il));display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;box-shadow:0 2px 12px rgba(49,27,146,.35)}
+.t-logo{font-family:var(--fd);font-size:20px;font-weight:900;font-style:italic;color:var(--G)}
+.t-logo b{color:#fff}
+.t-ttl{font-size:14px;font-weight:700;color:rgba(255,255,255,.9);flex:1}
+.t-btn{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8);font-size:15px;flex-shrink:0}
+.t-btn:active{background:rgba(255,255,255,.15)}
+
+/* ─ BOTTOM NAV ─ */
+.bnav{height:calc(var(--nav) + var(--safe));padding-bottom:var(--safe);background:#fff;border-top:1px solid var(--bd);display:flex;flex-shrink:0;box-shadow:0 -3px 12px rgba(44,24,16,.05)}
+.bni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--mu);font-size:10px;font-weight:600;padding-top:6px;transition:color .2s;cursor:pointer;position:relative}
+.bni i{font-size:18px;transition:transform .2s}
+.bni.on{color:var(--I)}
+.bni.on i{transform:scale(1.1)}
+.nbdg{position:absolute;top:5px;right:calc(50% - 14px);background:var(--C);color:#fff;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:50px;display:none;align-items:center;justify-content:center;padding:0 3px;border:2px solid #fff}
+.nbdg.on{display:flex}
+
+/* ─ SCREENS ─ */
+.scr{display:none;position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.scr.on{display:block}
+.scr::-webkit-scrollbar{width:0}
+
+/* ─ DASHBOARD ─ */
+.dhero{background:linear-gradient(135deg,var(--I),var(--Il));padding:20px 16px 24px;color:#fff;position:relative;overflow:hidden}
+.dhero::before{content:'';position:absolute;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.06);top:-50px;right:-30px}
+.dttl{font-family:var(--fd);font-size:20px;font-weight:700;font-style:italic;color:var(--G);position:relative}
+.dsub{font-size:12px;color:rgba(255,255,255,.7);margin-top:2px;position:relative}
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px}
+.sc{background:#fff;border-radius:var(--r);padding:16px;box-shadow:var(--sh);text-align:center}
+.sc-n{font-family:var(--fd);font-size:28px;font-weight:800;color:var(--I)}
+.sc-l{font-size:11px;color:var(--mu);font-weight:600;margin-top:3px}
+.sc.red .sc-n{color:var(--C)}
+.sc.gold .sc-n{color:var(--Gd)}
+.sc.green .sc-n{color:var(--gr)}
+
+/* ─ CARDS ─ */
+.sec{padding:0 16px 16px}
+.shdr{font-family:var(--fd);font-size:15px;font-weight:700;color:var(--tx);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.card{background:#fff;border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;margin-bottom:12px}
+.cr{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .12s}
+.cr:last-child{border-bottom:none}
+.cr:active{background:var(--Ip)}
+.ri{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.ri.bl{background:var(--Ip);color:var(--I)}
+.ri.rd{background:#FDE8E6;color:var(--C)}
+.ri.gd{background:#FFF8E1;color:var(--Gd)}
+.ri.gn{background:#E8F5E9;color:var(--gr)}
+.rttl{font-size:14px;font-weight:600;color:var(--tx)}
+.rsub{font-size:12px;color:var(--mu);margin-top:1px}
+
+/* ─ LIST ITEMS ─ */
+.sbox{display:flex;align-items:center;gap:9px;background:#fff;border:1.5px solid var(--bd);border-radius:50px;padding:9px 14px;margin:12px 16px}
+.sbox i{color:var(--mu);font-size:13px;flex-shrink:0}
+.sbox input{flex:1;font-size:14px;color:var(--tx)}
+.sbox input::placeholder{color:var(--mu)}
+
+.ci{display:flex;align-items:center;gap:11px;padding:12px 16px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .12s}
+.ci:active{background:var(--Ip)}
+.cav{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;overflow:hidden;background-size:cover;background-position:center}
+.cav img{width:100%;height:100%;object-fit:cover;display:block}
+.cinfo{flex:1;min-width:0}
+.cname{font-size:13px;font-weight:600;color:var(--tx)}
+.cprev{font-size:12px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ctime{font-size:10px;color:var(--mu);flex-shrink:0}
+
+/* ─ MESSAGES ─ */
+.mi{padding:13px 16px;border-bottom:1px solid var(--bd)}
+.mbub{background:var(--bg);border-radius:10px;padding:10px 13px;font-size:13px;color:var(--tx);margin-bottom:7px;border-left:3px solid var(--bd);line-height:1.4}
+.mbub.flag{border-left-color:var(--C);background:#FDE8E6}
+.mmeta{font-size:11px;color:var(--mu);margin-bottom:7px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.macts{display:flex;gap:6px}
+.ma{flex:1;padding:8px;border-radius:var(--rs);font-size:12px;font-weight:600;text-align:center;cursor:pointer}
+.ma:active{opacity:.7}
+.ma.ok{background:#E8F5E9;color:var(--gr)}
+.ma.wn{background:#FFF8E1;color:var(--Gd)}
+.ma.dl{background:#FDE8E6;color:var(--C)}
+.tag-r{background:#FDE8E6;color:var(--C);font-size:9px;font-weight:700;padding:2px 6px;border-radius:50px}
+.tag-g{background:#E8F5E9;color:var(--gr);font-size:9px;font-weight:700;padding:2px 6px;border-radius:50px}
+
+/* ─ USERS ─ */
+.ui{display:flex;align-items:center;gap:11px;padding:12px 16px;border-bottom:1px solid var(--bd)}
+.uav{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;overflow:hidden;background-size:cover;background-position:center}
+.uname{font-size:14px;font-weight:600;color:var(--tx)}
+.umeta{font-size:12px;color:var(--mu);margin-top:1px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.role{font-size:9px;font-weight:700;padding:2px 6px;border-radius:50px}
+.role.admin{background:#FDE8E6;color:var(--C)}
+.role.moderator{background:#FFF8E1;color:var(--Gd)}
+.role.user{background:var(--Ip);color:var(--I)}
+.banned{background:#FDE8E6;color:var(--C);font-size:9px;font-weight:700;padding:2px 6px;border-radius:50px}
+.uact{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer}
+.uact:active{opacity:.7}
+
+/* ─ BROADCAST ─ */
+.bta{width:100%;padding:13px;border:1.5px solid var(--bd);border-radius:var(--rs);font-size:14px;min-height:110px;resize:none;background:#fff;color:var(--tx);margin-bottom:12px;display:block;line-height:1.45}
+.bta:focus{border-color:var(--I);outline:none}
+.bta::placeholder{color:var(--mu)}
+.bprev{background:#fff;border:1px solid var(--bd);border-radius:var(--rs);padding:12px 14px;font-size:13px;color:var(--tx);min-height:44px;margin-bottom:14px;white-space:pre-wrap;line-height:1.45}
+
+/* ─ REALTIME LOG ─ */
+.rtlog{background:#fff;border-radius:var(--rs);border:1px solid var(--bd);max-height:300px;overflow-y:auto;font-size:11px;font-family:monospace;line-height:1.8}
+.rle{padding:6px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:flex-start;gap:8px}
+.rle:last-child{border-bottom:none}
+.rle.new{color:var(--gr)}
+.rle.del{color:var(--C)}
+.rle.rx{color:var(--I)}
+.rle.sys{color:var(--mu);font-style:italic}
+.rt{flex-shrink:0;color:var(--mu)}
+
+/* ─ MODAL ─ */
+.mov{position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center}
+.mov.on{display:flex}
+.msh{background:#fff;border-radius:var(--r) var(--r) 0 0;width:100%;max-width:480px;padding:16px 20px 32px;max-height:82vh;overflow-y:auto}
+.mhdl{width:36px;height:4px;border-radius:2px;background:var(--bd);margin:0 auto 16px}
+.mttl{font-family:var(--fd);font-size:17px;font-weight:700;color:var(--tx);margin-bottom:14px}
+
+/* ─ TOAST ─ */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(16px);background:#222;color:#fff;padding:10px 18px;border-radius:50px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;max-width:calc(100vw - 40px);text-align:center}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ─ UTILS ─ */
+.ld{display:flex;align-items:center;justify-content:center;padding:40px;flex:1}
+.sp{width:24px;height:24px;border:3px solid var(--bd);border-top-color:var(--I);border-radius:50%;animation:sp .65s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.empty{padding:40px 24px;text-align:center;color:var(--mu);font-size:14px}
+.rfrsh{background:var(--Ip);color:var(--I);padding:7px 14px;border-radius:50px;font-size:12px;font-weight:600;cursor:pointer}
+.rfrsh:active{background:#d1c4e9}
+.pill{font-size:9px;font-weight:700;padding:2px 7px;border-radius:50px;margin-left:4px;background:var(--C);color:#fff}
+</style>
+</head>
+<body>
+
+<!-- AUTH GATE -->
+<div id="gate">
+  <div class="gh">
+    <div class="g-logo">Oyo<b>Says</b></div>
+    <div class="g-badge"><i class="fa fa-shield-alt"></i> Admin &amp; Moderator Only</div>
+  </div>
+  <div class="gbody">
+    <div class="gttl">Messenger Control Panel</div>
+    <div class="gsub">Sign in with your admin or moderator account to continue</div>
+    <div id="gerr" class="errmsg"></div>
+    <label class="fl">Email Address</label>
+    <input class="fi" id="gem" type="email" placeholder="admin@email.com" autocomplete="email">
+    <label class="fl">Password</label>
+    <input class="fi" id="gpw" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="btnp" id="gbtn" onclick="adminLogin()">Sign In to Admin Panel</button>
+    <p style="text-align:center;font-size:13px;color:var(--mu);margin-top:16px">
+      <a href="messenger.html" style="color:var(--I);font-weight:600">← Back to Messenger</a>
+    </p>
+  </div>
+</div>
+
+<!-- ADMIN APP -->
+<div id="app">
+
+  <!-- TOPBAR -->
+  <div class="tbar">
+    <div class="t-logo">Oyo<b>Says</b></div>
+    <div class="t-ttl" id="adm-ttl">⚡ Messenger Admin</div>
+    <button class="t-btn" title="Back to Messenger" onclick="window.location.href='messenger.html'">
+      <i class="fa fa-comments"></i>
+    </button>
+    <button class="t-btn" title="Sign Out" onclick="doLogout()">
+      <i class="fa fa-sign-out-alt"></i>
+    </button>
+  </div>
+
+  <!-- SCREENS WRAPPER -->
+  <div style="flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column">
+
+  <!-- SCREEN: DASHBOARD -->
+  <div class="scr on" id="scr-dash">
+    <div class="dhero">
+      <div class="dttl">Dashboard</div>
+      <div class="dsub" id="d-greeting">Loading…</div>
+    </div>
+    <div class="sgrid" id="sgrid">
+      <div class="sc"><div class="ld" style="padding:12px"><div class="sp"></div></div></div>
+      <div class="sc"><div class="ld" style="padding:12px"><div class="sp"></div></div></div>
+      <div class="sc"><div class="ld" style="padding:12px"><div class="sp"></div></div></div>
+      <div class="sc"><div class="ld" style="padding:12px"><div class="sp"></div></div></div>
+    </div>
+    <div class="sec">
+      <div class="shdr"><i class="fa fa-bolt" style="color:var(--I)"></i> Quick Actions</div>
+      <div class="card">
+        <div class="cr" onclick="showTab('convos')">
+          <div class="ri bl"><i class="fa fa-comments"></i></div>
+          <div style="flex:1"><div class="rttl">All Conversations</div><div class="rsub">Browse &amp; moderate chats</div></div>
+          <i class="fa fa-chevron-right" style="color:var(--mu);font-size:12px"></i>
+        </div>
+        <div class="cr" onclick="showTab('flags')">
+          <div class="ri rd"><i class="fa fa-flag"></i></div>
+          <div style="flex:1"><div class="rttl">Flagged Messages</div><div class="rsub">Review reported content</div></div>
+          <span id="flag-badge" class="pill" style="display:none">0</span>
+        </div>
+        <div class="cr" onclick="showTab('search')">
+          <div class="ri gd"><i class="fa fa-search"></i></div>
+          <div style="flex:1"><div class="rttl">Search Messages</div><div class="rsub">Find by keyword or user</div></div>
+          <i class="fa fa-chevron-right" style="color:var(--mu);font-size:12px"></i>
+        </div>
+        <div class="cr" onclick="showTab('users')">
+          <div class="ri bl"><i class="fa fa-users"></i></div>
+          <div style="flex:1"><div class="rttl">Manage Users</div><div class="rsub">Warn, ban, unban accounts</div></div>
+          <i class="fa fa-chevron-right" style="color:var(--mu);font-size:12px"></i>
+        </div>
+        <div class="cr" onclick="showTab('bcast')">
+          <div class="ri gn"><i class="fa fa-bullhorn"></i></div>
+          <div style="flex:1"><div class="rttl">Broadcast Message</div><div class="rsub">DM all users at once</div></div>
+          <i class="fa fa-chevron-right" style="color:var(--mu);font-size:12px"></i>
+        </div>
+        <div class="cr" onclick="showTab('live')">
+          <div class="ri bl"><i class="fa fa-satellite-dish"></i></div>
+          <div style="flex:1"><div class="rttl">Live Activity Feed</div><div class="rsub">Real-time message log</div></div>
+          <i class="fa fa-chevron-right" style="color:var(--mu);font-size:12px"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN: CONVERSATIONS -->
+  <div class="scr" id="scr-convos">
+    <div style="background:#fff;border-bottom:1px solid var(--bd);padding:10px 16px;display:flex;gap:8px;align-items:center">
+      <div class="sbox" style="flex:1;margin:0">
+        <i class="fa fa-search"></i>
+        <input id="cv-q" type="text" placeholder="Search by name or message…" oninput="filterCvs(this.value)">
+      </div>
+      <button class="rfrsh" onclick="loadConvos()"><i class="fa fa-sync"></i></button>
+    </div>
+    <div id="cv-list"><div class="ld"><div class="sp"></div></div></div>
+  </div>
+
+  <!-- SCREEN: FLAGGED -->
+  <div class="scr" id="scr-flags">
+    <div style="background:#fff;border-bottom:1px solid var(--bd);padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;font-weight:700;color:var(--C)"><i class="fa fa-flag"></i> Reported Messages</span>
+      <button class="rfrsh" onclick="loadFlags()"><i class="fa fa-sync"></i> Refresh</button>
+    </div>
+    <div id="flag-list"><div class="ld"><div class="sp"></div></div></div>
+  </div>
+
+  <!-- SCREEN: SEARCH -->
+  <div class="scr" id="scr-search">
+    <div style="padding:10px 16px;background:#fff;border-bottom:1px solid var(--bd)">
+      <div class="sbox" style="margin:0">
+        <i class="fa fa-search"></i>
+        <input id="srch-q" type="text" placeholder="Search all message content…" oninput="doSearch(this.value)">
+      </div>
+    </div>
+    <div id="srch-res"><div class="empty">Type above to search across all messages</div></div>
+  </div>
+
+  <!-- SCREEN: USERS -->
+  <div class="scr" id="scr-users">
+    <div style="background:#fff;border-bottom:1px solid var(--bd);padding:10px 16px;display:flex;gap:8px;align-items:center">
+      <div class="sbox" style="flex:1;margin:0">
+        <i class="fa fa-search"></i>
+        <input id="usr-q" type="text" placeholder="Search users…" oninput="filterUsers(this.value)">
+      </div>
+      <button class="rfrsh" onclick="loadUsers()"><i class="fa fa-sync"></i></button>
+    </div>
+    <div id="usr-list"><div class="ld"><div class="sp"></div></div></div>
+  </div>
+
+  <!-- SCREEN: BROADCAST -->
+  <div class="scr" id="scr-bcast">
+    <div style="padding:16px">
+      <div class="shdr"><i class="fa fa-bullhorn" style="color:var(--gr)"></i> Broadcast Message</div>
+      <div style="background:#E8F5E9;border-radius:var(--rs);padding:12px 14px;font-size:12px;color:var(--gr);margin-bottom:14px;line-height:1.6;border:1px solid #a5d6a7">
+        📢 This will send a DM from your account to <strong>every active user</strong>. Use for important announcements only.
+      </div>
+      <label class="fl" style="margin-bottom:5px">Message</label>
+      <textarea class="bta" id="bcast-txt" placeholder="Type your broadcast message…" oninput="updatePreview(this.value)"></textarea>
+      <label class="fl" style="margin-bottom:5px">Preview</label>
+      <div class="bprev" id="bprev">Your message will appear here…</div>
+      <button class="btnp" onclick="sendBroadcast()">📢 Send to All Users</button>
+    </div>
+  </div>
+
+  <!-- SCREEN: LIVE -->
+  <div class="scr" id="scr-live">
+    <div style="padding:14px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="shdr" style="margin:0"><i class="fa fa-satellite-dish" style="color:var(--I)"></i> Live Activity</div>
+        <button class="rfrsh" onclick="clearLog()">Clear</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <span id="rt-st" style="background:var(--Ip);color:var(--I);font-size:11px;font-weight:700;padding:4px 10px;border-radius:50px">● Connecting…</span>
+        <span id="rt-ct" style="background:#E8F5E9;color:var(--gr);font-size:11px;font-weight:700;padding:4px 10px;border-radius:50px">0 events</span>
+      </div>
+      <div class="rtlog" id="rtlog">
+        <div class="rle sys"><span class="rt">—</span> Waiting for live events…</div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- end screens wrapper -->
+
+  <!-- BOTTOM NAV -->
+  <nav class="bnav">
+    <button class="bni on" id="bn-dash" onclick="showTab('dash')">
+      <i class="fa fa-tachometer-alt"></i><span>Dashboard</span>
+    </button>
+    <button class="bni" id="bn-flags" onclick="showTab('flags')">
+      <i class="fa fa-flag"></i><span>Flagged</span>
+      <span id="bnflag" class="nbdg">0</span>
+    </button>
+    <button class="bni" id="bn-convos" onclick="showTab('convos')">
+      <i class="fa fa-comments"></i><span>Chats</span>
+    </button>
+    <button class="bni" id="bn-users" onclick="showTab('users')">
+      <i class="fa fa-users"></i><span>Users</span>
+    </button>
+    <button class="bni" id="bn-bcast" onclick="showTab('bcast')">
+      <i class="fa fa-bullhorn"></i><span>Broadcast</span>
+    </button>
+  </nav>
+</div>
+
+<!-- View Convo Modal -->
+<div class="mov" id="cv-modal" onclick="if(event.target===this)closeMod()">
+  <div class="msh">
+    <div class="mhdl"></div>
+    <div class="mttl" id="cv-modal-ttl">Conversation</div>
+    <div id="cv-modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="tst"></div>
+
+<script>
+/* ═══════════════════════════════
+   OYOSAYS MESSENGER ADMIN PANEL
+═══════════════════════════════ */
+const{createClient}=supabase;
+const SURL='https://rbkybaglrufkcoosaysi.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJia3liYWdscnVma2Nvb3NheXNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMjA5MTEsImV4cCI6MjA4ODc5NjkxMX0.j7xRPZmRP39NxxsFVFWD8D49La2Ap4ku22dfYQUYqCs';
+const db=createClient(SURL,SKEY);
+
+const A={user:null,prof:null,pCache:{},allCvs:[],allUsers:[],rtSub:null,rtN:0};
+
+/* helpers */
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const ini=n=>{const p=(n||'?').split(' ');return((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase()||'?';};
+const clr=id=>{let h=0;for(const c of(id||''))h=(h<<5)-h+c.charCodeAt(0);return`hsl(${[210,280,340,25,160][Math.abs(h)%5]},52%,44%)`;};
+const ago=iso=>{if(!iso)return'';const d=(Date.now()-new Date(iso))/1e3;if(d<60)return'just now';if(d<3600)return~~(d/60)+'m ago';if(d<86400)return~~(d/3600)+'h ago';const dd=~~(d/86400);return dd<7?dd+'d ago':new Date(iso).toLocaleDateString('en-GB',{day:'numeric',month:'short'});};
+const mt=iso=>new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+let _tt;
+function toast(m,d=2800){const t=document.getElementById('tst');t.textContent=m;t.classList.add('on');clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('on'),d);}
+
+function avHtml(p,sz=40){
+  if(!p)return`<span style="width:${sz}px;height:${sz}px;border-radius:50%;background:#bbb;display:inline-flex;align-items:center;justify-content:center;font-size:${~~(sz*.36)}px;font-weight:700;color:#fff;flex-shrink:0">?</span>`;
+  if(p.avatar_url)return`<img src="${p.avatar_url}" style="width:${sz}px;height:${sz}px;border-radius:50%;object-fit:cover;display:block;flex-shrink:0" alt="">`;
+  return`<span style="width:${sz}px;height:${sz}px;border-radius:50%;background:${p.color||clr(p.id)};display:inline-flex;align-items:center;justify-content:center;font-size:${~~(sz*.36)}px;font-weight:700;color:#fff;flex-shrink:0">${ini(p.full_name)}</span>`;
+}
+
+async function loadProfs(ids){
+  const need=ids.filter(id=>id&&!A.pCache[id]);
+  if(!need.length)return;
+  const{data}=await db.from('profiles').select('id,full_name,avatar_url,color,verified,role,banned,city').in('id',need);
+  (data||[]).forEach(p=>{A.pCache[p.id]=p;});
+}
+
+/* ═══ AUTH ═══ */
+async function adminLogin(){
+  const em=document.getElementById('gem').value.trim();
+  const pw=document.getElementById('gpw').value;
+  const btn=document.getElementById('gbtn');
+  const err=document.getElementById('gerr');
+  err.classList.remove('on');
+  if(!em||!pw){err.textContent='Please enter email and password';err.classList.add('on');return;}
+  btn.disabled=true;btn.textContent='Signing in…';
+  try{
+    const{data,error}=await db.auth.signInWithPassword({email:em,password:pw});
+    if(error||!data?.user){err.textContent=error?.message||'Sign-in failed';err.classList.add('on');btn.disabled=false;btn.textContent='Sign In to Admin Panel';return;}
+    const{data:p}=await db.from('profiles').select('*').eq('id',data.user.id).single();
+    if(!['admin','moderator'].includes(p?.role)){
+      await db.auth.signOut();
+      err.textContent='Access denied — admin or moderator role required.';err.classList.add('on');btn.disabled=false;btn.textContent='Sign In to Admin Panel';return;
+    }
+    A.user=data.user;A.prof=p;A.pCache[p.id]=p;
+    document.getElementById('gate').classList.add('gone');
+    document.getElementById('app').classList.add('show');
+    document.getElementById('adm-ttl').textContent='⚡ '+p.role.charAt(0).toUpperCase()+p.role.slice(1)+' Panel';
+    document.getElementById('d-greeting').textContent='Signed in as '+( p.full_name||'Admin')+' ('+p.role+')';
+    await loadDash();
+    startLive();
+  }catch(e){err.textContent='Connection error. Check internet.';err.classList.add('on');btn.disabled=false;btn.textContent='Sign In to Admin Panel';console.error(e);}
+}
+
+async function doLogout(){
+  if(A.rtSub)await db.removeChannel(A.rtSub);
+  await db.auth.signOut();
+  location.reload();
+}
+
+/* auto session */
+(async()=>{
+  const{data}=await db.auth.getSession();
+  if(data?.session?.user){
+    const{data:p}=await db.from('profiles').select('*').eq('id',data.session.user.id).single();
+    if(['admin','moderator'].includes(p?.role)){
+      A.user=data.session.user;A.prof=p;A.pCache[p.id]=p;
+      document.getElementById('gate').classList.add('gone');
+      document.getElementById('app').classList.add('show');
+      document.getElementById('adm-ttl').textContent='⚡ '+p.role.charAt(0).toUpperCase()+p.role.slice(1)+' Panel';
+      document.getElementById('d-greeting').textContent='Signed in as '+(p.full_name||'Admin')+' ('+p.role+')';
+      await loadDash();
+      startLive();
+    }
+  }
+})();
+
+/* ═══ TABS ═══ */
+function showTab(t){
+  document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.bni').forEach(b=>b.classList.remove('on'));
+  document.getElementById('scr-'+t).classList.add('on');
+  const bn=document.getElementById('bn-'+t);
+  if(bn)bn.classList.add('on');
+  else document.getElementById('bn-dash').classList.add('on');
+  if(t==='convos')loadConvos();
+  else if(t==='flags')loadFlags();
+  else if(t==='users')loadUsers();
+  else if(t==='dash')loadDash();
+}
+
+/* ═══ DASHBOARD ═══ */
+async function loadDash(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const[r1,r2,r3,r4]=await Promise.all([
+    db.from('messages').select('*',{count:'exact',head:true}),
+    db.from('conversations').select('*',{count:'exact',head:true}),
+    db.from('messages').select('*',{count:'exact',head:true}).gte('created_at',today.toISOString()),
+    db.from('notifications').select('*',{count:'exact',head:true}).eq('type','report').eq('read',false),
+  ]);
+  const[tM,tC,tT,tF]=[r1.count??0,r2.count??0,r3.count??0,r4.count??0];
+  /* flag badges */
+  ['flag-badge','bnflag'].forEach(id=>{const b=document.getElementById(id);if(b){b.textContent=tF;b.style.display=tF>0?'inline':id==='bnflag'?'none':'none';if(id==='bnflag'&&tF>0)b.classList.add('on');}});
+  document.getElementById('sgrid').innerHTML=`
+    <div class="sc"><div class="sc-n">${tM}</div><div class="sc-l">Total Messages</div></div>
+    <div class="sc"><div class="sc-n">${tC}</div><div class="sc-l">Conversations</div></div>
+    <div class="sc gold"><div class="sc-n">${tT}</div><div class="sc-l">Messages Today</div></div>
+    <div class="sc red"><div class="sc-n">${tF}</div><div class="sc-l">Reports Pending</div></div>
+  `;
+}
+
+/* ═══ CONVERSATIONS ═══ */
+async function loadConvos(){
+  const el=document.getElementById('cv-list');
+  el.innerHTML='<div class="ld"><div class="sp"></div></div>';
+  const{data,error}=await db.from('conversations').select('*').order('last_message_at',{ascending:false}).limit(100);
+  if(error||!data?.length){el.innerHTML='<div class="empty">'+(error?'Error loading':'No conversations yet')+'</div>';return;}
+  const ids=[...new Set(data.flatMap(c=>[c.user1_id,c.user2_id]).filter(Boolean))];
+  await loadProfs(ids);
+  A.allCvs=data.map(c=>({...c,u1:A.pCache[c.user1_id],u2:A.pCache[c.user2_id]}));
+  renderCvs(A.allCvs);
+}
+
+function renderCvs(list){
+  const el=document.getElementById('cv-list');
+  if(!list.length){el.innerHTML='<div class="empty">No results</div>';return;}
+  el.innerHTML=list.map(c=>`
+    <div class="ci" onclick="viewConvo('${c.id}','${c.user1_id}','${c.user2_id}')">
+      <div class="cav" style="background:${c.u1?.avatar_url?'transparent':c.u1?.color||clr(c.user1_id)};background-image:${c.u1?.avatar_url?`url('${c.u1.avatar_url}')`:'none'};background-size:cover">
+        ${c.u1?.avatar_url?'':ini(c.u1?.full_name)}
+      </div>
+      <div class="cinfo">
+        <div class="cname">${esc(c.u1?.full_name||'?')} ↔ ${esc(c.u2?.full_name||'?')}</div>
+        <div class="cprev">${c.last_message?esc(c.last_message.slice(0,50)):'No messages yet'}</div>
+      </div>
+      <div class="ctime">${ago(c.last_message_at)}</div>
+    </div>`).join('');
+}
+
+function filterCvs(q){
+  if(!q.trim()){renderCvs(A.allCvs);return;}
+  const lq=q.toLowerCase();
+  renderCvs(A.allCvs.filter(c=>(c.u1?.full_name||'').toLowerCase().includes(lq)||(c.u2?.full_name||'').toLowerCase().includes(lq)||(c.last_message||'').toLowerCase().includes(lq)));
+}
+
+async function viewConvo(cid,u1id,u2id){
+  await loadProfs([u1id,u2id]);
+  const u1=A.pCache[u1id];const u2=A.pCache[u2id];
+  document.getElementById('cv-modal-ttl').textContent=(u1?.full_name||'?')+' ↔ '+(u2?.full_name||'?');
+  const el=document.getElementById('cv-modal-body');
+  el.innerHTML='<div class="ld"><div class="sp"></div></div>';
+  document.getElementById('cv-modal').classList.add('on');
+
+  const{data:msgs}=await db.from('messages').select('*').eq('conversation_id',cid).order('created_at',{ascending:false}).limit(60);
+  if(!msgs?.length){el.innerHTML='<div class="empty">No messages</div>';return;}
+  await loadProfs([...new Set(msgs.map(m=>m.sender_id).filter(Boolean))]);
+
+  el.innerHTML=msgs.map(m=>{
+    const s=A.pCache[m.sender_id]||{full_name:'?'};
+    const deleted=m.deleted_by_admin||m.deleted_by_sender||m.deleted_by_receiver;
+    return`<div class="mi">
+      <div class="mmeta">
+        <strong>${esc(s.full_name)}</strong>
+        <span style="color:var(--mu)">·</span>
+        <span>${new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+        ${m.deleted_by_admin?'<span class="tag-r">Admin deleted</span>':''}
+        ${m.read?'<span class="tag-g">Read ✓</span>':''}
+      </div>
+      <div class="mbub${m.deleted_by_admin?' flag':''}">${deleted?'<em>🚫 Deleted</em>':esc(m.content)}</div>
+      ${!deleted?`<div class="macts">
+        <div class="ma dl" onclick="admDelMsg('${m.id}',this)"><i class="fa fa-trash"></i> Delete</div>
+        <div class="ma wn" onclick="warnUser('${m.sender_id}')"><i class="fa fa-exclamation-triangle"></i> Warn</div>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function closeMod(){document.getElementById('cv-modal').classList.remove('on');}
+
+/* ═══ FLAGGED ═══ */
+async function loadFlags(){
+  const el=document.getElementById('flag-list');
+  el.innerHTML='<div class="ld"><div class="sp"></div></div>';
+  const{data}=await db.from('notifications').select('*').eq('type','report').eq('read',false).order('created_at',{ascending:false}).limit(50);
+  if(!data?.length){
+    el.innerHTML='<div class="empty">🎉 No flagged messages — all clear!</div>';
+    ['flag-badge','bnflag'].forEach(id=>document.getElementById(id)?.style&&(document.getElementById(id).style.display='none'));
+    return;
+  }
+  await loadProfs([...new Set(data.map(r=>r.actor_id).filter(Boolean))]);
+  el.innerHTML=data.map(r=>{
+    const actor=A.pCache[r.actor_id]||{full_name:'Unknown'};
+    return`<div class="mi" id="fl-${r.id}">
+      <div class="mmeta">Reported user: <strong>${esc(actor.full_name)}</strong> · ${ago(r.created_at)}</div>
+      <div class="mbub flag">${esc(r.message)}</div>
+      <div class="macts">
+        <div class="ma ok" onclick="dismissFlag('${r.id}')">✓ Dismiss</div>
+        <div class="ma wn" onclick="warnUser('${r.actor_id}')">⚠️ Warn</div>
+        <div class="ma dl" onclick="banFromFlag('${r.actor_id}','${r.id}')">🚫 Ban</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function dismissFlag(id){
+  await db.from('notifications').update({read:true}).eq('id',id);
+  document.getElementById('fl-'+id)?.remove();
+  if(!document.querySelector('[id^="fl-"]'))document.getElementById('flag-list').innerHTML='<div class="empty">🎉 All clear!</div>';
+  toast('✓ Dismissed');
+}
+async function banFromFlag(uid,fid){
+  if(!confirm('Ban this user from OyoSays?'))return;
+  await db.from('profiles').update({banned:true}).eq('id',uid);
+  await db.from('notifications').update({read:true}).eq('id',fid);
+  loadFlags();toast('🚫 User banned');
+}
+
+/* ═══ SEARCH ═══ */
+let _sT;
+function doSearch(q){
+  clearTimeout(_sT);
+  const el=document.getElementById('srch-res');
+  if(!q.trim()){el.innerHTML='<div class="empty">Type above to search</div>';return;}
+  el.innerHTML='<div class="ld"><div class="sp"></div></div>';
+  _sT=setTimeout(async()=>{
+    const{data}=await db.from('messages').select('*').ilike('content','%'+q+'%').eq('deleted_by_admin',false).order('created_at',{ascending:false}).limit(50);
+    if(!data?.length){el.innerHTML='<div class="empty">No results found</div>';return;}
+    await loadProfs([...new Set(data.flatMap(m=>[m.sender_id,m.receiver_id]).filter(Boolean))]);
+    el.innerHTML=data.map(m=>{
+      const s=A.pCache[m.sender_id]||{full_name:'?'};
+      const r=A.pCache[m.receiver_id]||{full_name:'?'};
+      return`<div class="mi">
+        <div class="mmeta">
+          <strong>${esc(s.full_name)}</strong> → <strong>${esc(r.full_name)}</strong>
+          <span style="color:var(--mu)">·</span>${ago(m.created_at)}
+        </div>
+        <div class="mbub">${esc(m.content)}</div>
+        <div class="macts">
+          <div class="ma dl" onclick="admDelMsg('${m.id}',this)"><i class="fa fa-trash"></i> Delete</div>
+          <div class="ma wn" onclick="warnUser('${m.sender_id}')"><i class="fa fa-exclamation-triangle"></i> Warn</div>
+        </div>
+      </div>`;
+    }).join('');
+  },350);
+}
+
+/* ═══ USERS ═══ */
+async function loadUsers(){
+  const el=document.getElementById('usr-list');
+  el.innerHTML='<div class="ld"><div class="sp"></div></div>';
+  const{data}=await db.from('profiles').select('*').order('joined_at',{ascending:false}).limit(120);
+  A.allUsers=data||[];renderUsers(A.allUsers);
+}
+
+function renderUsers(list){
+  const el=document.getElementById('usr-list');
+  if(!list.length){el.innerHTML='<div class="empty">No users</div>';return;}
+  el.innerHTML=list.map(u=>`
+    <div class="ui">
+      <div class="uav" style="background:${u.avatar_url?'transparent':u.color||clr(u.id)};background-image:${u.avatar_url?`url('${u.avatar_url}')`:'none'};background-size:cover;background-position:center">
+        ${u.avatar_url?'':ini(u.full_name)}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="uname">${esc(u.full_name||'?')}</div>
+        <div class="umeta">
+          ${u.city?esc(u.city)+' · ':''}
+          <span class="role ${u.role||'user'}">${u.role||'user'}</span>
+          ${u.banned?'<span class="banned">BANNED</span>':''}
+        </div>
+      </div>
+      <div style="display:flex;gap:5px">
+        <div class="uact" title="Warn user" style="background:#FFF8E1;color:var(--Gd)" onclick="warnUser('${u.id}')">
+          <i class="fa fa-exclamation-triangle"></i>
+        </div>
+        ${u.banned
+          ?`<div class="uact" title="Unban" style="background:#E8F5E9;color:var(--gr)" onclick="unbanUser('${u.id}')"><i class="fa fa-check"></i></div>`
+          :`<div class="uact" title="Ban" style="background:#FDE8E6;color:var(--C)" onclick="banUser('${u.id}')"><i class="fa fa-ban"></i></div>`
+        }
+      </div>
+    </div>`).join('');
+}
+
+function filterUsers(q){
+  if(!q.trim()){renderUsers(A.allUsers);return;}
+  const lq=q.toLowerCase();
+  renderUsers(A.allUsers.filter(u=>(u.full_name||'').toLowerCase().includes(lq)||(u.city||'').toLowerCase().includes(lq)||(u.role||'').includes(lq)));
+}
+
+async function banUser(uid){
+  if(!confirm('Ban this user? They will not be able to use OyoSays.'))return;
+  await db.from('profiles').update({banned:true}).eq('id',uid);
+  await loadUsers();toast('🚫 User banned');
+}
+async function unbanUser(uid){
+  await db.from('profiles').update({banned:false}).eq('id',uid);
+  await loadUsers();toast('✅ User unbanned');
+}
+async function warnUser(uid){
+  const msg=prompt('Warning message to send to user:');
+  if(!msg)return;
+  await db.from('notifications').insert({user_id:uid,actor_id:A.user.id,type:'warning',message:'⚠️ Admin Warning: '+msg,read:false,created_at:new Date().toISOString()});
+  toast('⚠️ Warning sent');
+}
+
+/* ═══ ADMIN ACTIONS ═══ */
+async function admDelMsg(msgId,btn){
+  const reason=prompt('Deletion reason (optional):');
+  const{error}=await db.from('messages').update({
+    deleted_by_admin:true,deleted_by_sender:true,deleted_by_receiver:true,
+    admin_delete_reason:reason||'Admin action'
+  }).eq('id',msgId);
+  if(error){toast('Error deleting message');console.error(error);return;}
+  /* update UI */
+  const item=btn?.closest('.mi');
+  if(item){item.querySelector('.mbub').innerHTML='<em>🚫 Admin deleted</em>';item.querySelector('.macts')?.remove();}
+  toast('✓ Message deleted');
+}
+
+/* ═══ BROADCAST ═══ */
+function updatePreview(v){document.getElementById('bprev').textContent=v||'Your message will appear here…';}
+
+async function sendBroadcast(){
+  const text=document.getElementById('bcast-txt').value.trim();
+  if(!text){toast('Please enter a message first');return;}
+  const{count}=await db.from('profiles').select('*',{count:'exact',head:true}).eq('banned',false).neq('id',A.user.id);
+  if(!confirm(`Send broadcast to approximately ${count||0} users?\n\n"${text.slice(0,120)}…"`))return;
+
+  const{data:users}=await db.from('profiles').select('id').eq('banned',false).neq('id',A.user.id);
+  if(!users?.length){toast('No users found');return;}
+
+  toast('📢 Sending broadcast…',10000);
+  let sent=0;
+
+  /* batch in groups of 5 to avoid overwhelming DB */
+  for(let i=0;i<users.length;i+=5){
+    const batch=users.slice(i,i+5);
+    await Promise.all(batch.map(async u=>{
+      const[uid1,uid2]=[A.user.id,u.id].sort();
+      const{data:cv}=await db.from('conversations').upsert({
+        user1_id:uid1,user2_id:uid2,
+        last_message:text.length>80?text.slice(0,80)+'…':text,
+        last_message_at:new Date().toISOString(),
+        last_sender_id:A.user.id,
+        unread_user1:uid1===u.id?1:0,
+        unread_user2:uid2===u.id?1:0
+      },{onConflict:'user1_id,user2_id'}).select('id').single();
+      if(cv?.id){
+        await db.from('messages').insert({
+          conversation_id:cv.id,sender_id:A.user.id,receiver_id:u.id,content:text,read:false
+        });
+        sent++;
+      }
+    }));
+    await new Promise(r=>setTimeout(r,100));
+  }
+  document.getElementById('bcast-txt').value='';
+  updatePreview('');
+  toast(`✅ Broadcast sent to ${sent} users`);
+}
+
+/* ═══ LIVE LOG ═══ */
+function startLive(){
+  if(A.rtSub)db.removeChannel(A.rtSub);
+  A.rtSub=db.channel('admin-live')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},({new:m})=>{
+      logEv('new',`💬 New message [convo …${m.conversation_id?.slice(-8)}] "${(m.content||'').slice(0,55)}${m.content?.length>55?'…':''}"`);
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'},({new:m})=>{
+      if(m.deleted_by_admin)logEv('del',`🗑️ Admin deleted msg …${m.id?.slice(-8)}`);
+      else if(m.deleted_by_sender)logEv('del',`🗑️ User deleted msg …${m.id?.slice(-8)}`);
+      else if(m.read)logEv('rx',`✓ Message read …${m.id?.slice(-8)}`);
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'message_reactions'},({new:r})=>{
+      logEv('rx',`${r.emoji} Reaction added on msg …${r.message_id?.slice(-8)}`);
+    })
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'message_reactions'},({old:r})=>{
+      logEv('del',`↩ Reaction removed on msg …${r.message_id?.slice(-8)}`);
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'conversations'},({new:c})=>{
+      logEv('new',`🆕 New conversation started …${c.id?.slice(-8)}`);
+    })
+    .subscribe(st=>{
+      const s=document.getElementById('rt-st');
+      if(!s)return;
+      if(st==='SUBSCRIBED'){s.textContent='● Live';s.style.background='#E8F5E9';s.style.color='var(--gr)';}
+      else{s.textContent='● '+st;s.style.background='#FFF8E1';s.style.color='var(--Gd)';}
+    });
+}
+
+function logEv(type,msg){
+  A.rtN++;
+  const ct=document.getElementById('rt-ct');if(ct)ct.textContent=A.rtN+' event'+(A.rtN===1?'':'s');
+  const el=document.getElementById('rtlog');if(!el)return;
+  const wait=el.querySelector('.rle.sys');if(wait)wait.remove();
+  const d=document.createElement('div');
+  d.className='rle '+type;
+  d.innerHTML=`<span class="rt">${mt(new Date())}</span> ${esc(msg)}`;
+  el.insertBefore(d,el.firstChild);
+  while(el.children.length>120)el.removeChild(el.lastChild);
+}
+
+function clearLog(){
+  A.rtN=0;
+  const ct=document.getElementById('rt-ct');if(ct)ct.textContent='0 events';
+  const el=document.getElementById('rtlog');if(el)el.innerHTML='<div class="rle sys"><span class="rt">—</span> Log cleared</div>';
+}
+</script>
+</body>
+</html>

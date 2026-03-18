@@ -1,0 +1,990 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- ================================================================
+  ⚠️  REQUIRED SQL — Run in Supabase SQL Editor before using mod panel
+  (Same policies required as in admin.html)
+
+  CREATE POLICY "Admins can update any profile" ON profiles FOR UPDATE
+    USING (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('admin','moderator')));
+
+  CREATE POLICY "Admins can delete any post" ON posts FOR DELETE
+    USING (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('admin','moderator')));
+
+  CREATE POLICY "Admins can delete any comment" ON comments FOR DELETE
+    USING (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('admin','moderator')));
+================================================================ -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OyoSays Moderator Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#F4EFE6;--surface:#FFFFFF;--surface2:#F9F5EE;--surface3:#EEE7D5;
+  --border:rgba(49,27,146,.09);--border2:rgba(49,27,146,.17);
+  --text:#1A1018;--text-muted:#6B5C70;--text-dim:#B8A8BC;
+  --indigo:#311B92;--indigo-b:#4527A0;--indigo-pale:#EDE7F6;
+  --gold:#B07B00;--gold-pale:#FFF8DC;--gold-b:rgba(176,123,0,.22);
+  --coral:#B33426;--coral-pale:#FDE8E6;--coral-b:rgba(179,52,38,.18);
+  --green:#1B5E20;--green-pale:#E8F5E9;--green-b:rgba(27,94,32,.18);--green-t:#2E7D32;
+  --shadow:0 2px 12px rgba(49,27,146,.1);--shadow-lg:0 8px 32px rgba(49,27,146,.18);
+  --font-d:'Playfair Display',serif;--font-b:'Outfit',sans-serif;
+  --r:14px;--rs:10px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-b);background:var(--bg);color:var(--text);min-height:100vh}
+button{font-family:var(--font-b);cursor:pointer;border:none;outline:none}
+input,select,textarea{font-family:var(--font-b);outline:none}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:repeating-linear-gradient(45deg,rgba(49,27,146,.018) 0,rgba(49,27,146,.018) 1px,transparent 1px,transparent 30px),
+  repeating-linear-gradient(-45deg,rgba(49,27,146,.018) 0,rgba(49,27,146,.018) 1px,transparent 1px,transparent 30px)}
+
+/* ── AUTH ── */
+#auth-wrap{position:fixed;inset:0;z-index:900;background:var(--bg);display:flex;align-items:center;justify-content:center}
+#auth-wrap.gone{display:none}
+.auth-card{width:380px;background:var(--surface);border:1.5px solid var(--border2);border-radius:20px;overflow:hidden;box-shadow:var(--shadow-lg)}
+.auth-hero{background:linear-gradient(155deg,var(--indigo),var(--indigo-b),#5E35B1);padding:30px;text-align:center;position:relative;overflow:hidden}
+.auth-hero::before{content:'';position:absolute;top:-50px;right:-50px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.06)}
+.auth-logo{font-family:var(--font-d);font-size:36px;font-weight:900;font-style:italic;color:#FFB300;position:relative}
+.auth-logo span{color:#E8715F}
+.auth-role{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.15);color:#fff;font-size:10px;font-weight:700;padding:4px 12px;border-radius:50px;margin-top:8px;letter-spacing:1.5px;position:relative}
+.auth-desc{font-size:12px;color:rgba(255,255,255,.5);margin-top:6px;position:relative}
+.auth-inner{padding:26px 28px 30px}
+.af{display:flex;flex-direction:column;gap:6px;margin-bottom:13px}
+.af label{font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.8px;text-transform:uppercase}
+.af input{padding:11px 13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--rs);font-size:14px;color:var(--text);transition:border-color .2s}
+.af input:focus{border-color:var(--indigo-b)}
+.af input::placeholder{color:var(--text-dim)}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:40px;width:100%}
+.pw-eye{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--text-dim);cursor:pointer;font-size:13px;background:none;padding:4px}
+.auth-err{font-size:12px;color:var(--coral);background:var(--coral-pale);border:1px solid var(--coral-b);border-radius:7px;padding:8px 12px;margin-bottom:12px;display:none;align-items:center;gap:7px}
+.auth-err.show{display:flex}
+.btn-auth{width:100%;padding:13px;background:linear-gradient(135deg,var(--indigo),var(--indigo-b));color:#fff;font-size:14px;font-weight:700;border-radius:var(--rs);transition:all .2s;box-shadow:0 4px 18px rgba(69,39,160,.3)}
+.btn-auth:hover{opacity:.88;transform:translateY(-1px)}
+.auth-note{font-size:11px;color:var(--text-dim);text-align:center;margin-top:12px;line-height:1.7}
+
+/* ── APP ── */
+#app{position:relative;z-index:1;display:none;min-height:100vh;flex-direction:column}
+#app.on{display:flex}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--surface);border-bottom:1.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:58px;position:sticky;top:0;z-index:50;box-shadow:var(--shadow)}
+.tb-left{display:flex;align-items:center;gap:10px}
+.tb-logo{font-family:var(--font-d);font-size:21px;font-weight:900;font-style:italic;color:var(--indigo)}
+.tb-logo span{color:var(--coral)}
+.tb-mod-badge{font-size:9px;font-weight:800;background:linear-gradient(135deg,var(--indigo),var(--indigo-b));color:#fff;padding:3px 10px;border-radius:50px;letter-spacing:1.5px}
+.tb-right{display:flex;align-items:center;gap:10px}
+.tb-usr{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--text-muted)}
+.tb-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.tb-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-logout{padding:6px 13px;border-radius:50px;font-size:12px;font-weight:700;background:var(--coral-pale);color:var(--coral);border:1.5px solid var(--coral-b);transition:all .2s}
+.btn-logout:hover{background:var(--coral);color:#fff}
+
+/* ── TABS ── */
+.tabs{background:var(--surface);border-bottom:1.5px solid var(--border);display:flex;padding:0 14px;overflow-x:auto;scrollbar-width:none;gap:2px}
+.tabs::-webkit-scrollbar{display:none}
+.tab{display:flex;align-items:center;gap:7px;padding:14px 14px;font-size:13px;font-weight:600;color:var(--text-muted);background:transparent;border-bottom:2.5px solid transparent;white-space:nowrap;transition:all .2s;margin-bottom:-1.5px}
+.tab:hover{color:var(--indigo)}
+.tab.on{color:var(--indigo);border-bottom-color:var(--indigo)}
+.tab .tc{font-size:9px;font-weight:800;background:var(--indigo-pale);color:var(--indigo);padding:2px 7px;border-radius:50px}
+.tab.on .tc{background:var(--indigo);color:#fff}
+.tab .tcr{background:var(--coral-pale);color:var(--coral)}
+
+/* ── CONTENT ── */
+.content{flex:1;padding:18px 16px;max-width:860px;margin:0 auto;width:100%}
+.sec{display:none}
+.sec.on{display:block}
+
+/* ── STAT STRIP ── */
+.ss{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.sp{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r);padding:14px 12px;text-align:center;position:relative;overflow:hidden;transition:border-color .2s,transform .2s}
+.sp:hover{border-color:var(--border2);transform:translateY(-2px)}
+.sp::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.sp.b::before{background:linear-gradient(90deg,var(--indigo-b),#7E57C2)}
+.sp.g::before{background:linear-gradient(90deg,#C68B00,#E65100)}
+.sp.r::before{background:linear-gradient(90deg,var(--coral),#E8715F)}
+.sp.gr::before{background:linear-gradient(90deg,var(--green-t),#43A047)}
+.sp-n{font-size:22px;font-weight:800;color:var(--text);font-family:var(--font-d);line-height:1;margin-top:2px}
+.sp-l{font-size:10px;color:var(--text-muted);margin-top:3px;font-weight:600}
+
+/* ── POST CARD ── */
+.pc{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.pc:hover{border-color:var(--border2);box-shadow:var(--shadow)}
+.pc-hdr{display:flex;align-items:center;gap:10px;padding:13px 14px 8px}
+.pc-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;cursor:pointer}
+.pc-meta{flex:1;min-width:0}
+.pc-nm{font-size:14px;font-weight:700;color:var(--text)}
+.pc-sub{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap}
+.city-tag{display:inline-flex;align-items:center;gap:3px;background:var(--indigo-pale);color:var(--indigo);font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px}
+.pc-body{padding:2px 14px 10px;font-size:14px;color:var(--text);line-height:1.65}
+.pc-stats{display:flex;gap:14px;padding:8px 14px;background:var(--surface2);border-top:1px solid var(--border);font-size:12px;color:var(--text-muted)}
+.pc-acts{display:flex;gap:7px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.pab{flex:1;min-width:100px;padding:8px 10px;border-radius:var(--rs);font-size:12px;font-weight:700;border:1.5px solid;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px}
+.pab.del{border-color:var(--coral-b);color:var(--coral);background:var(--coral-pale)}
+.pab.del:hover{background:var(--coral);color:#fff;border-color:var(--coral)}
+.pab.wrn{border-color:var(--gold-b);color:var(--gold);background:var(--gold-pale)}
+.pab.wrn:hover{background:#C68B00;color:#fff;border-color:#C68B00}
+.pab.ban{border-color:rgba(179,52,38,.25);color:var(--coral);background:rgba(179,52,38,.06)}
+.pab.ban:hover{background:var(--coral);color:#fff}
+
+/* ── COMMENT ROW ── */
+.cr{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r);padding:13px 14px;margin-bottom:9px;display:flex;gap:10px;transition:border-color .2s}
+.cr:hover{border-color:var(--border2)}
+.cr-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.cr-body{flex:1}
+.cr-nm{font-size:13px;font-weight:700;color:var(--text)}
+.cr-text{font-size:13px;color:var(--text-muted);margin-top:3px;line-height:1.5}
+.cr-meta{font-size:11px;color:var(--text-dim);margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cr-del{padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;background:var(--coral-pale);color:var(--coral);border:1px solid var(--coral-b);flex-shrink:0;transition:all .2s;margin-top:auto}
+.cr-del:hover{background:var(--coral);color:#fff}
+
+/* ── USER ROW ── */
+.ur{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r);padding:13px 14px;margin-bottom:9px;display:flex;align-items:center;gap:11px;transition:border-color .2s}
+.ur:hover{border-color:var(--border2)}
+.ur-av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.ur-info{flex:1;min-width:0}
+.ur-nm{font-size:14px;font-weight:700;color:var(--text)}
+.ur-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
+.ur-acts{display:flex;gap:7px;align-items:center;flex-shrink:0;flex-wrap:wrap}
+.urb{padding:7px 13px;border-radius:50px;font-size:11px;font-weight:700;border:1.5px solid;transition:all .2s;white-space:nowrap}
+.urb.ban{border-color:var(--coral-b);color:var(--coral);background:var(--coral-pale)}
+.urb.ban:hover{background:var(--coral);color:#fff;border-color:var(--coral)}
+.urb.unban{border-color:var(--green-b);color:var(--green-t);background:var(--green-pale)}
+.urb.unban:hover{background:var(--green-t);color:#fff}
+.urb.wrn{border-color:var(--gold-b);color:var(--gold);background:var(--gold-pale)}
+.urb.wrn:hover{background:#C68B00;color:#fff}
+.bdg{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:50px;font-size:10px;font-weight:700}
+.bdg.act{background:var(--green-pale);color:var(--green-t);border:1px solid var(--green-b)}
+.bdg.ban{background:var(--coral-pale);color:var(--coral);border:1px solid var(--coral-b)}
+
+/* ── SEARCH ── */
+.sb{display:flex;align-items:center;gap:9px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--rs);padding:10px 13px;margin-bottom:14px;transition:border-color .2s}
+.sb:focus-within{border-color:var(--indigo-b)}
+.sb i{color:var(--text-dim);font-size:13px}
+.sb input{flex:1;background:transparent;font-size:13px;color:var(--text);border:none}
+.sb input::placeholder{color:var(--text-dim)}
+.chips{display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap}
+.chip{padding:6px 13px;border-radius:50px;font-size:12px;font-weight:600;background:var(--surface);border:1.5px solid var(--border);color:var(--text-muted);cursor:pointer;transition:all .2s}
+.chip.on,.chip:hover{background:var(--indigo);border-color:var(--indigo);color:#fff}
+
+/* ── MODAL ── */
+.mov{position:fixed;inset:0;z-index:800;background:rgba(30,10,20,.5);display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)}
+.mov.on{display:flex}
+.modal{background:var(--surface);width:100%;max-width:460px;border-radius:20px 20px 0 0;padding:10px 22px 32px;animation:slideUp .3s cubic-bezier(.4,0,.2,1);box-shadow:var(--shadow-lg)}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.sh{width:38px;height:4px;background:var(--border2);border-radius:4px;margin:8px auto 18px}
+.mt{font-family:var(--font-d);font-size:17px;font-weight:700;color:var(--text);margin-bottom:7px;display:flex;align-items:center;gap:8px}
+.ms{font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.5}
+.macts{display:flex;gap:9px}
+.mb{flex:1;padding:12px;border-radius:var(--rs);font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center}
+.mb:hover{opacity:.85}
+.mb.can{background:var(--surface2);color:var(--text-muted);border:1.5px solid var(--border)}
+.mb.d{background:var(--coral);color:#fff;border:none}
+.mb.w{background:#C68B00;color:#fff;border:none}
+.mb.s{background:var(--green-t);color:#fff;border:none}
+.m-ta{width:100%;padding:11px 13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--rs);font-size:13px;color:var(--text);resize:none;margin-bottom:8px;transition:border-color .2s}
+.m-ta:focus{border-color:var(--indigo-b)}
+.m-ta::placeholder{color:var(--text-dim)}
+
+/* ── EMPTY STATE ── */
+.empty{display:flex;flex-direction:column;align-items:center;padding:52px 24px;gap:9px;text-align:center}
+.empty-icon{font-size:38px;opacity:.4}
+.empty-title{font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text)}
+.empty-sub{font-size:13px;color:var(--text-muted);line-height:1.5}
+
+/* ── LOG ROW ── */
+.log-row{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.log-row:last-child{border-bottom:none}
+.log-ico{width:32px;height:32px;border-radius:50%;background:var(--indigo-pale);color:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.log-body{flex:1}
+.log-action{font-size:13px;font-weight:700;color:var(--text)}
+.log-detail{font-size:12px;color:var(--text-muted);margin-top:2px}
+.log-time{font-size:11px;color:var(--text-dim);margin-top:3px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(14px);background:var(--text);color:#fff;padding:11px 20px;border-radius:50px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:all .28s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(30,10,20,.3)}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.s{background:var(--green-t)}.toast.e{background:var(--coral)}
+
+/* ── MISC ── */
+.spin{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.sec-hdr{margin-bottom:16px}
+.sec-title{font-family:var(--font-d);font-size:19px;font-weight:700;color:var(--text)}
+.sec-sub{font-size:12px;color:var(--text-muted);margin-top:2px}
+.warn-strip{background:var(--gold-pale);border:1.5px solid var(--gold-b);border-radius:var(--rs);padding:11px 14px;margin-bottom:16px;font-size:13px;color:var(--gold);font-weight:600;display:flex;align-items:center;gap:8px}
+
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+@media(max-width:600px){.ss{grid-template-columns:1fr 1fr}.pc-acts{flex-direction:column}.pab{min-width:unset}.ur-acts{flex-direction:column;align-items:flex-start}}
+</style>
+
+</head>
+<body>
+
+<!-- AUTH -->
+
+<div id="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-hero">
+      <div class="auth-logo">Oyo<span>Says</span></div>
+      <div class="auth-role"><i class="fa fa-shield-alt"></i> MODERATOR PANEL</div>
+      <div class="auth-desc">Sign in with your OyoSays account.<br>Only assigned moderators can access this panel.</div>
+    </div>
+    <div class="auth-inner">
+      <div class="af"><label>Your OyoSays Email</label><input type="email" id="ae" placeholder="you@example.com" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <div class="af"><label>Password</label><div class="pw-wrap"><input type="password" id="ap" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="pw-eye" onclick="const i=document.getElementById('ap');i.type=i.type==='password'?'text':'password';this.querySelector('i').className=i.type==='text'?'fa fa-eye-slash':'fa fa-eye'" tabindex="-1"><i class="fa fa-eye"></i></button></div></div>
+      <div class="auth-err" id="aerr"><i class="fa fa-shield-alt"></i><span id="aerr-t">Access denied</span></div>
+      <button class="btn-auth" id="btn-l" onclick="doLogin()">Sign In as Moderator</button>
+      <div class="auth-note">🔒 Access restricted to users assigned the<br><strong>Moderator</strong> role by an OyoSays admin.</div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+
+<div id="app">
+  <div class="topbar">
+    <div class="tb-left">
+      <div class="tb-logo">Oyo<span>Says</span></div>
+      <div class="tb-mod-badge"><i class="fa fa-shield-alt"></i> MOD</div>
+    </div>
+    <div class="tb-right">
+      <div class="tb-usr">
+        <div class="tb-av" id="tb-av">M</div>
+        <span class="tb-name" id="tb-nm">Moderator</span>
+      </div>
+      <button class="btn-logout" onclick="doLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" onclick="goTab('queue',this)"><i class="fa fa-inbox"></i> Review Queue <span class="tc tcr" id="tc-q">0</span></button>
+    <button class="tab" onclick="goTab('posts',this)"><i class="fa fa-file-alt"></i> All Posts <span class="tc" id="tc-p">0</span></button>
+    <button class="tab" onclick="goTab('comments',this)"><i class="fa fa-comments"></i> Comments <span class="tc" id="tc-c">0</span></button>
+    <button class="tab" onclick="goTab('users',this)"><i class="fa fa-users"></i> Users <span class="tc" id="tc-u">0</span></button>
+    <button class="tab" onclick="goTab('banned',this)"><i class="fa fa-ban"></i> Banned <span class="tc tcr" id="tc-bn">0</span></button>
+    <button class="tab" onclick="goTab('reports',this)"><i class="fa fa-flag"></i> Reports <span class="tc tcr" id="tc-rp">0</span></button>
+    <button class="tab" onclick="goTab('support',this)"><i class="fa fa-headset"></i> Support <span class="tc tcr" id="tc-sp">0</span></button>
+    <button class="tab" onclick="goTab('appeals',this)"><i class="fa fa-gavel"></i> Appeals <span class="tc tcr" id="tc-ap">0</span></button>
+    <button class="tab" onclick="goTab('log',this)"><i class="fa fa-list-alt"></i> My Log</button>
+  </div>
+
+  <div class="content">
+
+<!-- QUEUE -->
+<div class="sec on" id="tab-queue">
+  <div class="ss">
+    <div class="sp b"><div style="font-size:20px;margin-bottom:4px">📥</div><div class="sp-n" id="sq-p">—</div><div class="sp-l">Posts Today</div></div>
+    <div class="sp g"><div style="font-size:20px;margin-bottom:4px">💬</div><div class="sp-n" id="sq-c">—</div><div class="sp-l">Comments Today</div></div>
+    <div class="sp r"><div style="font-size:20px;margin-bottom:4px">⚡</div><div class="sp-n" id="sq-a">0</div><div class="sp-l">Actions Today</div></div>
+    <div class="sp gr"><div style="font-size:20px;margin-bottom:4px">👥</div><div class="sp-n" id="sq-u">—</div><div class="sp-l">Total Users</div></div>
+  </div>
+  <div class="warn-strip"><i class="fa fa-exclamation-triangle"></i> Review recent posts. Remove anything violating OyoSays community guidelines.</div>
+  <div id="queue-list"></div>
+</div>
+
+<!-- ALL POSTS -->
+<div class="sec" id="tab-posts">
+  <div class="sec-hdr"><div class="sec-title">All Posts</div><div class="sec-sub">Moderate content across all cities</div></div>
+  <div class="sb"><i class="fa fa-search"></i><input type="text" placeholder="Search posts…" oninput="sposts(this.value)"></div>
+  <div class="chips" id="city-chips">
+    <div class="chip on" onclick="cityFilter('',this)">All Cities</div>
+    <div class="chip" onclick="cityFilter('Ibadan',this)">Ibadan</div>
+    <div class="chip" onclick="cityFilter('Ogbomoso',this)">Ogbomoso</div>
+    <div class="chip" onclick="cityFilter('Oyo',this)">Oyo</div>
+    <div class="chip" onclick="cityFilter('Iseyin',this)">Iseyin</div>
+    <div class="chip" onclick="cityFilter('Saki',this)">Saki</div>
+    <div class="chip" onclick="cityFilter('Eruwa',this)">Eruwa</div>
+  </div>
+  <div id="posts-list"></div>
+</div>
+
+<!-- COMMENTS -->
+<div class="sec" id="tab-comments">
+  <div class="sec-hdr"><div class="sec-title">Comments</div><div class="sec-sub">Review all user comments</div></div>
+  <div class="sb"><i class="fa fa-search"></i><input type="text" placeholder="Search comments…" oninput="scoms(this.value)"></div>
+  <div id="coms-list"></div>
+</div>
+
+<!-- USERS -->
+<div class="sec" id="tab-users">
+  <div class="sec-hdr"><div class="sec-title">Users</div><div class="sec-sub">Warn or ban users who violate guidelines</div></div>
+  <div class="sb"><i class="fa fa-search"></i><input type="text" placeholder="Search users by name or city…" oninput="susers(this.value)"></div>
+  <div id="users-list"></div>
+</div>
+
+<!-- REPORTS -->
+<div class="sec" id="tab-reports">
+  <div class="sec-hdr"><div class="sec-title">User Reports</div><div class="sec-sub">Reports submitted by users — real-time</div></div>
+  <div id="reports-list"><div class="empty"><div class="empty-icon">🚩</div><div class="empty-title">Loading reports…</div></div></div>
+</div>
+
+<!-- PRIORITY SUPPORT -->
+<div class="sec" id="tab-support">
+  <div class="sec-hdr"><div class="sec-title">Priority Support</div><div class="sec-sub">Tickets from verified members — reply and resolve</div></div>
+  <div id="support-list"><div class="empty"><div class="empty-icon">📩</div><div class="empty-title">Loading tickets…</div></div></div>
+</div>
+
+<!-- ACCOUNT APPEALS -->
+<div class="sec" id="tab-appeals">
+  <div class="sec-hdr"><div class="sec-title">Account Appeals</div><div class="sec-sub">Review suspension/ban appeals from users</div></div>
+  <div id="appeals-list"><div class="empty"><div class="empty-icon">⚖️</div><div class="empty-title">Loading appeals…</div></div></div>
+</div>
+
+<!-- BANNED USERS -->
+<div class="sec" id="tab-banned">
+  <div class="sec-hdr"><div class="sec-title">Banned Users</div><div class="sec-sub">Users currently banned — unban or take further action</div></div>
+  <div class="sb"><i class="fa fa-search"></i><input type="text" placeholder="Search banned users…" oninput="sbanned(this.value)"></div>
+  <div id="banned-list"></div>
+</div>
+
+<!-- LOG -->
+<div class="sec" id="tab-log">
+  <div class="sec-hdr"><div class="sec-title">My Action Log</div><div class="sec-sub">Your moderation actions this session</div></div>
+  <div id="log-list"><div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No actions yet</div><div class="empty-sub">Your moderation actions will appear here as you work.</div></div></div>
+</div>
+
+
+  </div>
+</div>
+
+<!-- Modal: Confirm -->
+
+<div class="mov" id="m-del">
+  <div class="modal">
+    <div class="sh"></div>
+    <div class="mt" id="md-t"><i class="fa fa-trash" style="color:var(--coral)"></i> Confirm Action</div>
+    <div class="ms" id="md-b">Are you sure?</div>
+    <div class="macts">
+      <button class="mb can" onclick="closeM('m-del')">Cancel</button>
+      <button class="mb d" id="md-btn" onclick="exDel()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Warn -->
+
+<div class="mov" id="m-warn">
+  <div class="modal">
+    <div class="sh"></div>
+    <div class="mt"><i class="fa fa-exclamation-circle" style="color:var(--gold)"></i> Warn User</div>
+    <div class="ms" id="mw-sub">Send an official warning notification to this user.</div>
+    <textarea class="m-ta" id="warn-txt" rows="3" placeholder="e.g. Your post violated community guidelines. Repeated violations may result in a ban."></textarea>
+    <div class="macts">
+      <button class="mb can" onclick="closeM('m-warn')">Cancel</button>
+      <button class="mb w" onclick="sendWarn()"><i class="fa fa-exclamation-circle"></i> Send Warning</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ban -->
+
+<div class="mov" id="m-ban">
+  <div class="modal">
+    <div class="sh"></div>
+    <div class="mt" id="mb-t"><i class="fa fa-ban" style="color:var(--coral)"></i> Ban User</div>
+    <div class="ms" id="mb-b">This will prevent the user from signing in to OyoSays.</div>
+    <div class="macts">
+      <button class="mb can" onclick="closeM('m-ban')">Cancel</button>
+      <button class="mb d" onclick="exBan()"><i class="fa fa-ban"></i> Ban User</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Reply to Support Ticket -->
+<div class="mov" id="m-support-reply">
+  <div class="modal">
+    <div class="sh"></div>
+    <div class="mt"><i class="fa fa-reply" style="color:var(--indigo)"></i> Reply to Support Ticket</div>
+    <div class="ms" id="sr-sub-mod">Replying to support ticket.</div>
+    <textarea class="m-ta" id="sr-reply-mod" rows="4" placeholder="Type your reply to the user…"></textarea>
+    <select class="m-ta" id="sr-status-mod" style="min-height:unset;padding:10px">
+      <option value="resolved">✅ Mark as Resolved</option>
+      <option value="pending">⏳ Mark as Pending</option>
+      <option value="open">🔵 Keep Open</option>
+    </select>
+    <div class="macts">
+      <button class="mb can" onclick="closeM('m-support-reply')">Cancel</button>
+      <button class="mb s" onclick="sendModSupportReply()"><i class="fa fa-paper-plane"></i> Send Reply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Respond to Appeal -->
+<div class="mov" id="m-appeal-reply">
+  <div class="modal">
+    <div class="sh"></div>
+    <div class="mt"><i class="fa fa-gavel" style="color:var(--gold)"></i> Respond to Appeal</div>
+    <div class="ms" id="ar-sub-mod">Review this suspension appeal.</div>
+    <textarea class="m-ta" id="ar-reply-mod" rows="3" placeholder="Optional: explain your decision…"></textarea>
+    <div class="macts">
+      <button class="mb can" onclick="closeM('m-appeal-reply')">Cancel</button>
+      <button class="mb d" onclick="resolveModAppeal('rejected')"><i class="fa fa-times"></i> Reject</button>
+      <button class="mb s" onclick="resolveModAppeal('approved')"><i class="fa fa-check"></i> Approve & Unban</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="tst"></div>
+
+<script>
+'use strict';
+const SURL='https://rbkybaglrufkcoosaysi.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJia3liYWdscnVma2Nvb3NheXNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMjA5MTEsImV4cCI6MjA4ODc5NjkxMX0.j7xRPZmRP39NxxsFVFWD8D49La2Ap4ku22dfYQUYqCs';
+const db=supabase.createClient(SURL,SKEY);
+
+const S={user:null,profile:null,users:[],posts:[],coms:[],fp:[],fc:[],fu:[],
+  actToday:0,delFn:null,warnUid:null,warnUnm:null,banUid:null,banUnm:null,log:[]};
+
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const ini=n=>(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';
+const clr=id=>{const c=['#311B92','#C44536','#2E7D32','#E65100','#6A1B9A','#1565C0','#558B2F','#4E342E'];let h=0;for(const x of String(id))h=(h*31+x.charCodeAt(0))&0xFFFFFFFF;return c[Math.abs(h)%c.length]};
+const ago=iso=>{if(!iso)return'—';const d=(Date.now()-new Date(iso))/1000;if(d<60)return'just now';if(d<3600)return Math.floor(d/60)+'m ago';if(d<86400)return Math.floor(d/3600)+'h ago';return new Date(iso).toLocaleDateString('en-NG',{day:'numeric',month:'short'})};
+function toast(m,t=''){const e=document.getElementById('tst');e.textContent=m;e.className='toast on '+t;clearTimeout(e._t);e._t=setTimeout(()=>e.className='toast',3300)}
+function closeM(id){document.getElementById(id).classList.remove('on')}
+function addLog(action,target){
+  S.log.unshift({action,target,time:new Date().toISOString()});
+  S.actToday++;document.getElementById('sq-a').textContent=S.actToday;
+  renderLog();
+}
+
+/* ── MOD DB HELPER ────────────────────────────────────────────────
+   Performs update then re-reads to confirm RLS didn't silently block it
+──────────────────────────────────────────────────────────────────*/
+async function adminUpdate(table,fields,matchCol,matchVal,verifyCol){
+  const{error}=await db.from(table).update(fields).eq(matchCol,matchVal);
+  if(error)return{ok:false,error:error.message};
+  if(verifyCol){
+    const{data:row}=await db.from(table).select(verifyCol).eq(matchCol,matchVal).single();
+    const expected=fields[verifyCol];
+    if(row&&row[verifyCol]!==expected){
+      return{ok:false,error:'RLS policy blocked this action. Ask the admin to run the required SQL policies in Supabase (see admin.html header comment).'};
+    }
+  }
+  return{ok:true,error:null};
+}
+
+/* ── AUTH: Only moderators & admins allowed ── */
+async function doLogin(){
+  const email=document.getElementById('ae').value.trim();
+  const pass=document.getElementById('ap').value;
+  const err=document.getElementById('aerr');
+  const btn=document.getElementById('btn-l');
+  err.classList.remove('show');btn.textContent='Checking access…';btn.disabled=true;
+  try{
+    /* Authenticate via Supabase */
+    const{data,error}=await db.auth.signInWithPassword({email,password:pass});
+    if(error)throw error;
+    /* Fetch profile and check role */
+    const{data:prof,error:pe}=await db.from('profiles').select('*').eq('id',data.user.id).single();
+    if(pe||!prof)throw new Error('Profile not found.');
+    /* STRICT ROLE CHECK: only moderator or admin role allowed */
+    if(prof.role!=='moderator'&&prof.role!=='admin'){
+      await db.auth.signOut();
+      throw new Error('Access denied. You have not been assigned moderator privileges. Contact the admin.');
+    }
+    /* Also check if banned */
+    if(prof.banned){
+      await db.auth.signOut();
+      throw new Error('Your account has been suspended.');
+    }
+    S.user=data.user;S.profile=prof;
+    const av=document.getElementById('tb-av');
+    av.textContent=ini(prof.full_name||'M');av.style.background=prof.color||'#311B92';
+    document.getElementById('tb-nm').textContent=(prof.full_name||email).split(' ')[0];
+    document.getElementById('auth-wrap').classList.add('gone');
+    document.getElementById('app').classList.add('on');
+    await loadAll();
+    startModRealtime();
+    toast('✅ Welcome, '+(prof.full_name||'Moderator')+'!','s');
+  }catch(e){
+    err.querySelector('#aerr-t').textContent=e.message||'Authentication failed';
+    err.classList.add('show');
+  }finally{btn.textContent='Sign In as Moderator';btn.disabled=false}
+}
+async function doLogout(){
+  if(S.rtSub){try{db.removeChannel(S.rtSub);}catch(e){}}
+  S.rtSub=null;
+  await db.auth.signOut();
+  document.getElementById('app').classList.remove('on');
+  document.getElementById('auth-wrap').classList.remove('gone');
+  S.user=null;S.profile=null;
+}
+
+/* ── TABS ── */
+function goTab(name,el){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('tab-'+name).classList.add('on');el.classList.add('on');
+  if(name==='reports')loadReports();
+  if(name==='support')loadModSupport();
+  if(name==='appeals')loadModAppeals();
+  if(name==='banned'){
+    _modBanned=S.users.filter(u=>u.banned);
+    _modBannedF=[..._modBanned];
+    renderBannedMod(_modBannedF);
+    const tcBn3=document.getElementById('tc-bn');
+    if(tcBn3)tcBn3.textContent=_modBanned.length||0;
+  }
+}
+
+/* ── LOAD ── */
+async function loadAll(){
+  try{
+    const[ur,pr,cr]=await Promise.all([
+      db.from('profiles').select('*').order('joined_at',{ascending:false}),
+      db.from('posts').select('*').order('created_at',{ascending:false}).limit(400),
+      db.from('comments').select('*').order('created_at',{ascending:false}).limit(400),
+    ]);
+    S.users=ur.data||[];S.posts=pr.data||[];S.coms=cr.data||[];
+    S.fp=[...S.posts];S.fc=[...S.coms];S.fu=[...S.users];
+    _modBanned=S.users.filter(u=>u.banned);
+    _modBannedF=[..._modBanned];
+    document.getElementById('tc-p').textContent=S.posts.length;
+    document.getElementById('tc-c').textContent=S.coms.length;
+    document.getElementById('tc-u').textContent=S.users.length;
+    const bannedCount=S.users.filter(u=>u.banned).length;
+    const tcBnEl=document.getElementById('tc-bn');if(tcBnEl)tcBnEl.textContent=bannedCount||0;
+    document.getElementById('sq-u').textContent=S.users.filter(u=>!u.banned).length;
+    const t=new Date();t.setHours(0,0,0,0);
+    document.getElementById('sq-p').textContent=S.posts.filter(p=>new Date(p.created_at)>=t).length;
+    document.getElementById('sq-c').textContent=S.coms.filter(c=>new Date(c.created_at)>=t).length;
+    document.getElementById('tc-q').textContent=Math.min(S.posts.length,20);
+    renderQueue();renderPosts();renderComs();renderUsers();
+    await loadReports();
+    await loadModSupport();
+    await loadModAppeals();
+  }catch(e){console.error('loadAll error:',e)}
+}
+
+/* ── BUILD POST CARD ── */
+function buildCard(p){
+  const u=S.users.find(u=>u.id===p.user_id)||{full_name:'Unknown User'};
+  const col=u.color||clr(p.user_id||'?');
+  return`<div class="pc" id="pc-${p.id}">
+    <div class="pc-hdr">
+      <div class="pc-av" style="background:${col}">${ini(u.full_name)}</div>
+      <div class="pc-meta">
+        <div class="pc-nm">${esc(u.full_name)}</div>
+        <div class="pc-sub"><span class="city-tag"><i class="fa fa-map-marker-alt"></i> ${esc(p.city||'Oyo')}</span><span>${ago(p.created_at)}</span></div>
+      </div>
+    </div>
+    <div class="pc-body">${esc(p.content||'')}</div>
+    <div class="pc-stats"><span>❤️ ${p.likes_count||0} likes</span><span>💬 ${p.comments_count||0} comments</span><span style="margin-left:auto;font-size:11px;color:var(--text-dim)">${p.id.substring(0,8)}…</span></div>
+    <div class="pc-acts">
+      <button class="pab wrn" onclick="openWarn('${p.user_id}','${esc(u.full_name)}')"><i class="fa fa-exclamation-circle"></i> Warn Author</button>
+      <button class="pab del" onclick="openDel('post','${p.id}','${esc(u.full_name)}')"><i class="fa fa-trash"></i> Delete Post</button>
+      <button class="pab ban" onclick="openBan('${p.user_id}','${esc(u.full_name)}')"><i class="fa fa-ban"></i> Ban Author</button>
+    </div>
+  </div>`;
+}
+
+function renderQueue(){document.getElementById('queue-list').innerHTML=S.posts.slice(0,20).map(p=>buildCard(p)).join('')||'<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">Queue is clear</div><div class="empty-sub">No recent posts to review.</div></div>'}
+function renderPosts(){document.getElementById('posts-list').innerHTML=S.fp.map(p=>buildCard(p)).join('')||'<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">No posts found</div></div>'}
+function sposts(q){S.fp=S.posts.filter(p=>(p.content||'').toLowerCase().includes(q.toLowerCase())||(p.city||'').toLowerCase().includes(q.toLowerCase()));renderPosts()}
+function cityFilter(c,el){document.querySelectorAll('.chip').forEach(ch=>ch.classList.remove('on'));el.classList.add('on');S.fp=c?S.posts.filter(p=>p.city===c):[...S.posts];renderPosts()}
+
+function renderComs(){
+  document.getElementById('coms-list').innerHTML=S.fc.map(c=>{
+    const u=S.users.find(u=>u.id===c.user_id)||{full_name:'Unknown'};
+    return`<div class="cr" id="cr-${c.id}">
+      <div class="cr-av" style="background:${u.color||clr(c.user_id||'?')}">${ini(u.full_name)}</div>
+      <div class="cr-body">
+        <div class="cr-nm">${esc(u.full_name)}</div>
+        <div class="cr-text">${esc(c.content||'')}</div>
+        <div class="cr-meta"><span>${ago(c.created_at)}</span><span>Post: ${(c.post_id||'').substring(0,8)}…</span></div>
+      </div>
+      <button class="cr-del" onclick="openDel('comment','${c.id}','${esc(u.full_name)}')"><i class="fa fa-trash"></i></button>
+    </div>`;
+  }).join('')||'<div class="empty"><div class="empty-icon">💬</div><div class="empty-title">No comments</div></div>';
+}
+function scoms(q){S.fc=S.coms.filter(c=>(c.content||'').toLowerCase().includes(q.toLowerCase()));renderComs()}
+
+function renderUsers(){
+  document.getElementById('users-list').innerHTML=S.fu.map(u=>{
+    const pc=S.posts.filter(p=>p.user_id===u.id).length;
+    return`<div class="ur" id="ur-${u.id}">
+      <div class="ur-av" style="background:${u.color||clr(u.id)}">${ini(u.full_name)}</div>
+      <div class="ur-info">
+        <div class="ur-nm">${esc(u.full_name)}</div>
+        <div class="ur-sub">${esc(u.city||'Oyo State')} · ${pc} posts · joined ${ago(u.joined_at)}</div>
+      </div>
+      <span class="bdg ${u.banned?'ban':'act'}">${u.banned?'⛔ Banned':'✅ Active'}</span>
+      <div class="ur-acts">
+        <button class="urb wrn" onclick="openWarn('${u.id}','${esc(u.full_name)}')"><i class="fa fa-exclamation-circle"></i></button>
+        ${u.banned?`<button class="urb unban" onclick="doUnban('${u.id}','${esc(u.full_name)}')">Unban</button>`:`<button class="urb ban" onclick="openBan('${u.id}','${esc(u.full_name)}')">Ban</button>`}
+      </div>
+    </div>`;
+  }).join('')||'<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">No users</div></div>';
+}
+function susers(q){const lq=q.toLowerCase();S.fu=S.users.filter(u=>(u.full_name||'').toLowerCase().includes(lq)||(u.city||'').toLowerCase().includes(lq));renderUsers()}
+
+/* ── DELETE ── */
+function openDel(type,id,nm){
+  const isPost=type==='post';
+  document.getElementById('md-t').innerHTML=`<i class="fa fa-trash" style="color:var(--coral)"></i> Delete ${isPost?'Post':'Comment'}`;
+  document.getElementById('md-b').textContent=`${isPost?'Delete this post by "'+nm+'"':'Delete this comment'}? This cannot be undone.`;
+  document.getElementById('md-btn').textContent='Delete';
+  S.delFn=async()=>{
+    const tbl=isPost?'posts':'comments';
+    const{error}=await db.from(tbl).delete().eq('id',id);
+    if(error){toast('❌ '+error.message,'e');return}
+    if(isPost){S.posts=S.posts.filter(p=>p.id!==id);S.fp=S.fp.filter(p=>p.id!==id);document.getElementById('tc-p').textContent=S.posts.length}
+    else{S.coms=S.coms.filter(c=>c.id!==id);S.fc=S.fc.filter(c=>c.id!==id);document.getElementById('tc-c').textContent=S.coms.length}
+    document.getElementById((isPost?'pc-':'cr-')+id)?.remove();
+    addLog('Deleted '+(isPost?'Post':'Comment'),'by '+nm);
+    toast('🗑️ Deleted successfully','s');
+  };
+  document.getElementById('m-del').classList.add('on');
+}
+function exDel(){if(S.delFn){S.delFn();S.delFn=null}closeM('m-del')}
+
+/* ── WARN ── */
+function openWarn(uid,name){
+  S.warnUid=uid;S.warnUnm=name;
+  document.getElementById('mw-sub').textContent='Send an official warning to "'+name+'".';
+  document.getElementById('warn-txt').value='';
+  document.getElementById('m-warn').classList.add('on');
+}
+async function sendWarn(){
+  const msg=document.getElementById('warn-txt').value.trim();
+  if(!msg){toast('Type a warning message first','e');return}
+  const{error}=await db.from('notifications').insert({user_id:S.warnUid,actor_id:S.user.id,type:'admin_dm',message:'⚠️ Official Warning: '+msg,read:false,created_at:new Date().toISOString()});
+  if(error){toast('❌ '+error.message,'e');return}
+  closeM('m-warn');addLog('Warned User',S.warnUnm);
+  toast('⚠️ Warning sent to '+S.warnUnm,'');
+  S.warnUid=null;S.warnUnm=null;
+}
+
+/* ── BAN ── */
+function openBan(uid,name){
+  S.banUid=uid;S.banUnm=name;
+  document.getElementById('mb-t').innerHTML='<i class="fa fa-ban" style="color:var(--coral)"></i> Ban: '+esc(name);
+  document.getElementById('mb-b').textContent='"'+name+'" will lose access to OyoSays immediately.';
+  document.getElementById('m-ban').classList.add('on');
+}
+async function exBan(){
+  const{ok,error}=await adminUpdate('profiles',{banned:true},'id',S.banUid,'banned');
+  if(!ok){toast('❌ '+error,'e');return}
+  const u=S.users.find(u=>u.id===S.banUid);if(u)u.banned=true;
+  S.fu=[...S.users];
+  closeM('m-ban');renderUsers();renderQueue();
+  addLog('Banned User',S.banUnm);
+  toast('⛔ '+S.banUnm+' has been banned','');
+  S.banUid=null;S.banUnm=null;
+}
+async function doUnban(uid,name){
+  const{ok,error}=await adminUpdate('profiles',{banned:false},'id',uid,'banned');
+  if(!ok){toast('❌ '+error,'e');return}
+  const u=S.users.find(u=>u.id===uid);if(u)u.banned=false;
+  S.fu=[...S.users];renderUsers();addLog('Unbanned User',name);toast('✅ '+name+' unbanned','s');
+}
+
+/* ── LOG ── */
+function renderLog(){
+  document.getElementById('log-list').innerHTML=S.log.length?S.log.map(e=>`<div class="log-row"><div class="log-ico"><i class="fa fa-shield-alt"></i></div><div class="log-body"><div class="log-action">${esc(e.action)}</div><div class="log-detail">${esc(e.target)}</div><div class="log-time">${ago(e.time)}</div></div></div>`).join(''):`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No actions yet</div><div class="empty-sub">Your moderation actions will appear here.</div></div>`;
+}
+
+/* ── REALTIME ── */
+let _modRtTimer=null;
+function _modDebounce(){clearTimeout(_modRtTimer);_modRtTimer=setTimeout(()=>loadAll(),700);}
+function startModRealtime(){
+  if(S.rtSub){try{db.removeChannel(S.rtSub);}catch(e){}}
+  S.rtSub=db.channel('mod-rt')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'posts'},pl=>{
+      if(pl.new){S.posts.unshift(pl.new);S.fp=[...S.posts];document.getElementById('tc-p').textContent=S.posts.length;renderQueue();renderPosts();}
+    })
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'posts'},pl=>{
+      const id=pl.old&&pl.old.id;
+      if(id){S.posts=S.posts.filter(p=>p.id!==id);S.fp=[...S.posts];document.getElementById('tc-p').textContent=S.posts.length;renderQueue();renderPosts();}
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'comments'},pl=>{
+      if(pl.new){S.coms.unshift(pl.new);S.fc=[...S.coms];document.getElementById('tc-c').textContent=S.coms.length;renderComs();}
+    })
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'comments'},pl=>{
+      const id=pl.old&&pl.old.id;
+      if(id){S.coms=S.coms.filter(c=>c.id!==id);S.fc=[...S.coms];document.getElementById('tc-c').textContent=S.coms.length;renderComs();}
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles'},pl=>{
+      if(pl.new){
+        const i=S.users.findIndex(u=>u.id===pl.new.id);
+        if(i!==-1){
+          S.users[i]={...S.users[i],...pl.new};
+          S.fu=[...S.users];
+          renderUsers();
+          // Refresh banned list and count
+          _modBanned=S.users.filter(u=>u.banned);
+          _modBannedF=[..._modBanned];
+          const cnt=document.getElementById('tc-bn');if(cnt)cnt.textContent=_modBanned.length||0;
+          if(document.getElementById('tab-banned')?.classList.contains('on'))renderBannedMod(_modBannedF);
+        }
+      }
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'reports'},()=>{
+      loadReports();
+      toast('🚨 New user report!','e');
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'priority_support'},()=>{
+      const cnt=document.getElementById('tc-sp');if(cnt)cnt.textContent=parseInt(cnt.textContent||'0')+1;
+      if(document.getElementById('tab-support')?.classList.contains('on'))loadModSupport();
+      toast('📩 New priority support ticket!','');
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'account_appeals'},()=>{
+      const cnt=document.getElementById('tc-ap');if(cnt)cnt.textContent=parseInt(cnt.textContent||'0')+1;
+      if(document.getElementById('tab-appeals')?.classList.contains('on'))loadModAppeals();
+      toast('⚖️ New account appeal!','');
+    })
+    .subscribe((status)=>{
+      if(status==='SUBSCRIBED')console.log('[OyoSays Mod] Realtime connected');
+    });
+}
+
+/* ── REPORTS ── */
+async function loadReports(){
+  const el=document.getElementById('reports-list');if(!el)return;
+  const rpcnt=document.getElementById('tc-rp');
+  try{
+    const{data,error}=await db.from('reports').select('*').order('created_at',{ascending:false}).limit(50);
+    if(error){el.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Reports not set up</div><div class="empty-sub">Run: CREATE TABLE reports (id uuid default gen_random_uuid() PRIMARY KEY, reporter_id uuid, reported_id uuid, reason text, details text, created_at timestamptz default now())</div></div>';return}
+    const reports=data||[];
+    if(rpcnt)rpcnt.textContent=reports.length;
+    el.innerHTML=reports.length?reports.map(r=>{
+      const reporter=S.users.find(u=>u.id===r.reporter_id)||{full_name:'Unknown'};
+      const reported=S.users.find(u=>u.id===r.reported_id)||{full_name:'Unknown'};
+      return`<div class="cr" style="flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center">
+          <div class="cr-av" style="background:${reported.color||clr(r.reported_id||'?')}">${ini(reported.full_name)}</div>
+          <div style="flex:1">
+            <div class="cr-nm">Reported: <strong style="color:var(--coral)">${esc(reported.full_name)}</strong></div>
+            <div class="cr-text">By: ${esc(reporter.full_name)} · Reason: <strong>${esc(r.reason||'—')}</strong></div>
+            <div class="cr-meta"><span>${ago(r.created_at)}</span></div>
+          </div>
+        </div>
+        ${r.details?`<div style="font-size:12px;color:var(--text-muted);padding:8px;background:var(--surface2);border-radius:var(--rs)">${esc(r.details)}</div>`:''}
+        <div style="display:flex;gap:7px">
+          <button class="urb ban" onclick="openBan('${r.reported_id}','${esc(reported.full_name)}')"><i class="fa fa-ban"></i> Ban</button>
+          <button class="urb wrn" onclick="openWarn('${r.reported_id}','${esc(reported.full_name)}')"><i class="fa fa-exclamation-circle"></i> Warn</button>
+          <button class="cr-del" onclick="dismissReport('${r.id}')"><i class="fa fa-check"></i> Dismiss</button>
+        </div>
+      </div>`;
+    }).join(''):'<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No reports</div><div class="empty-sub">No user reports yet.</div></div>';
+  }catch(e){if(el)el.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error loading reports</div></div>';console.warn(e)}
+}
+async function dismissReport(id){
+  await db.from('reports').delete().eq('id',id);
+  loadReports();toast('✅ Report dismissed','s');
+}
+
+/* ── PRIORITY SUPPORT (MOD) ── */
+let _modSupportTicketId=null,_modSupportUserId=null;
+async function loadModSupport(){
+  const el=document.getElementById('support-list');if(!el)return;
+  const cnt=document.getElementById('tc-sp');
+  try{
+    const{data,error}=await db.from('priority_support').select('*, profiles(full_name,color,city)').order('created_at',{ascending:false}).limit(100);
+    if(error){
+      el.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Not set up</div><div class="empty-sub">Run the priority_support SQL migration from the index.html header.</div></div>';
+      return;
+    }
+    const tickets=data||[];
+    const open=tickets.filter(t=>t.status!=='resolved').length;
+    if(cnt)cnt.textContent=open||0;
+    el.innerHTML=tickets.length?tickets.map(t=>{
+      const u=t.profiles||S.users.find(u=>u.id===t.user_id)||{full_name:'Unknown'};
+      const statusBadge=t.status==='resolved'
+        ?`<span class="bdg act">✅ Resolved</span>`
+        :`<span class="bdg" style="background:#FFF8E1;color:var(--gold);border:1px solid var(--gold-b)">🔵 ${t.status==='pending'?'Pending':'Open'}</span>`;
+      return`<div class="cr" style="flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div class="cr-av" style="background:${u.color||clr(t.user_id||'?')}">${ini(u.full_name)}</div>
+          <div style="flex:1">
+            <div class="cr-nm">${esc(u.full_name)} ${statusBadge}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-top:2px">${esc(t.subject||'Support Request')}</div>
+            <div class="cr-text">${esc((t.message||'').substring(0,120))}</div>
+            <div class="cr-meta"><span><i class="fa fa-tag" style="font-size:10px"></i> ${t.category||'other'}</span><span>${ago(t.created_at)}</span></div>
+          </div>
+        </div>
+        ${t.admin_reply?`<div style="padding:8px 10px;background:var(--indigo-pale);border-radius:var(--rs);border-left:3px solid var(--indigo);font-size:12px;color:var(--indigo)"><strong>Reply sent:</strong> ${esc(t.admin_reply)}</div>`:''}
+        ${t.status!=='resolved'?`<div style="display:flex;gap:7px">
+          <button class="urb wrn" onclick="openModSupportReply('${t.id}','${t.user_id}','${esc(u.full_name)}','${esc(t.subject||'')}')"><i class="fa fa-reply"></i> Reply</button>
+          <button class="cr-del" onclick="markModSupportResolved('${t.id}')"><i class="fa fa-check"></i> Resolve</button>
+        </div>`:''}
+      </div>`;
+    }).join(''):'<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No support tickets</div><div class="empty-sub">No priority support tickets submitted yet.</div></div>';
+  }catch(e){el.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error loading tickets</div></div>';console.warn(e)}
+}
+function openModSupportReply(id,userId,userName,subject){
+  _modSupportTicketId=id;_modSupportUserId=userId;
+  document.getElementById('sr-sub-mod').textContent='Replying to "'+subject+'" from '+userName;
+  document.getElementById('sr-reply-mod').value='';
+  document.getElementById('sr-status-mod').value='resolved';
+  document.getElementById('m-support-reply').classList.add('on');
+}
+async function sendModSupportReply(){
+  if(!_modSupportTicketId)return;
+  const reply=document.getElementById('sr-reply-mod').value.trim();
+  const status=document.getElementById('sr-status-mod').value;
+  if(!reply){toast('Type a reply first','e');return;}
+  const{error}=await db.from('priority_support').update({admin_reply:reply,status,replied_at:new Date().toISOString()}).eq('id',_modSupportTicketId);
+  if(error){toast('❌ '+error.message,'e');return;}
+  if(_modSupportUserId){
+    await db.from('notifications').insert({user_id:_modSupportUserId,actor_id:S.user.id,type:'admin_dm',message:'📩 Support Reply: '+reply.substring(0,200),read:false,created_at:new Date().toISOString()}).catch(()=>{});
+  }
+  closeM('m-support-reply');
+  addLog('Support Reply','Ticket: '+_modSupportTicketId.substring(0,8));
+  toast('✅ Reply sent!','s');
+  _modSupportTicketId=null;_modSupportUserId=null;
+  loadModSupport();
+}
+async function markModSupportResolved(id){
+  await db.from('priority_support').update({status:'resolved'}).eq('id',id);
+  addLog('Resolved Ticket',id.substring(0,8));
+  loadModSupport();toast('✅ Ticket resolved','s');
+}
+
+/* ── ACCOUNT APPEALS (MOD) ── */
+let _modAppealId=null,_modAppealUid=null;
+async function loadModAppeals(){
+  const el=document.getElementById('appeals-list');if(!el)return;
+  const cnt=document.getElementById('tc-ap');
+  try{
+    const{data,error}=await db.from('account_appeals').select('*, profiles(full_name,color,city,banned)').order('created_at',{ascending:false}).limit(100);
+    if(error){
+      el.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Not set up</div><div class="empty-sub">Run the account_appeals SQL migration from the index.html header.</div></div>';
+      return;
+    }
+    const appeals=data||[];
+    const pending=appeals.filter(a=>a.status==='pending').length;
+    if(cnt)cnt.textContent=pending||0;
+    el.innerHTML=appeals.length?appeals.map(a=>{
+      const u=a.profiles||S.users.find(u=>u.id===a.user_id)||{full_name:'Unknown'};
+      const statusBadge=a.status==='approved'
+        ?`<span class="bdg act">✅ Approved</span>`
+        :a.status==='rejected'
+        ?`<span class="bdg ban">❌ Rejected</span>`
+        :`<span class="bdg" style="background:#FFF8E1;color:var(--gold);border:1px solid var(--gold-b)">⏳ Pending</span>`;
+      return`<div class="cr" style="flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div class="cr-av" style="background:${u.color||clr(a.user_id||'?')}">${ini(u.full_name)}</div>
+          <div style="flex:1">
+            <div class="cr-nm">${esc(u.full_name)} ${statusBadge}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--coral);margin-top:2px">Reason: ${esc(a.reason||'—')}</div>
+            <div class="cr-text">${esc((a.details||'').substring(0,150))}</div>
+            <div class="cr-meta"><span>${ago(a.created_at)}</span></div>
+          </div>
+        </div>
+        ${a.admin_reply?`<div style="padding:8px 10px;background:var(--indigo-pale);border-radius:var(--rs);font-size:12px;color:var(--indigo)"><strong>Admin response:</strong> ${esc(a.admin_reply)}</div>`:''}
+        ${a.status==='pending'?`<div style="display:flex;gap:7px">
+          <button class="urb wrn" onclick="openModAppealReply('${a.id}','${a.user_id}','${esc(u.full_name)}')"><i class="fa fa-gavel"></i> Review</button>
+        </div>`:''}
+        ${a.status==='rejected'?(()=>{
+          let cdNote='';
+          if(a.appeal_cooldown_until){
+            const h=(new Date(a.appeal_cooldown_until)-Date.now())/(1000*60*60);
+            cdNote=h>0?`<div style="font-size:11px;color:var(--gold);margin-top:4px">⏳ Re-appeal in ${Math.ceil(h)}h</div>`:`<div style="font-size:11px;color:var(--green-t);margin-top:4px">✓ User can re-appeal now</div>`;
+          }
+          return`<div style="display:flex;gap:7px;margin-top:6px"><button class="urb wrn" onclick="openModAppealReply('${a.id}','${a.user_id}','${esc(u.full_name)}')"><i class="fa fa-redo"></i> Override</button></div>${cdNote}`;
+        })():''}
+      </div>`;
+    }).join(''):'<div class="empty"><div class="empty-icon">⚖️</div><div class="empty-title">No appeals</div><div class="empty-sub">No account appeals submitted yet.</div></div>';
+  }catch(e){el.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error loading appeals</div></div>';console.warn(e)}
+}
+function openModAppealReply(appealId,userId,userName){
+  _modAppealId=appealId;_modAppealUid=userId;
+  document.getElementById('ar-sub-mod').textContent='Reviewing appeal from '+userName+'. Approving will unban this user.';
+  document.getElementById('ar-reply-mod').value='';
+  document.getElementById('m-appeal-reply').classList.add('on');
+}
+async function resolveModAppeal(decision){
+  if(!_modAppealId||!_modAppealUid)return;
+  const reply=document.getElementById('ar-reply-mod').value.trim();
+  const now=new Date().toISOString();
+  const upd={status:decision,admin_reply:reply||null,replied_at:now};
+  if(decision==='rejected')upd.appeal_cooldown_until=new Date(Date.now()+15*60*60*1000).toISOString();
+  const{error}=await db.from('account_appeals').update(upd).eq('id',_modAppealId);
+  if(error){toast('❌ '+error.message,'e');return;}
+  if(decision==='approved'){
+    const{ok,error:rlsErr}=await adminUpdate('profiles',{banned:false},'id',_modAppealUid,'banned');
+    if(!ok){toast('❌ '+rlsErr,'e');return;}
+    const u=S.users.find(u=>u.id===_modAppealUid);if(u){u.banned=false;S.fu=[...S.users];renderUsers();}
+    await db.from('notifications').insert({user_id:_modAppealUid,actor_id:S.user.id,type:'admin_dm',message:'✅ Your appeal has been approved! Your account has been reinstated. Welcome back to OyoSays.'+(reply?' — '+reply:''),read:false,created_at:now}).catch(()=>{});
+    addLog('Appeal Approved','Unbanned: '+_modAppealUid.substring(0,8));
+    toast('✅ Appeal approved — user unbanned!','s');
+  }else{
+    await db.from('notifications').insert({user_id:_modAppealUid,actor_id:S.user.id,type:'admin_dm',message:'❌ Your appeal was declined. You may re-appeal in 15 hours.'+(reply?' Reason: '+reply:''),read:false,created_at:now}).catch(()=>{});
+    addLog('Appeal Rejected',_modAppealUid.substring(0,8));
+    toast('Appeal rejected — user can re-appeal in 15 hours.','');
+  }
+  closeM('m-appeal-reply');
+  _modAppealId=null;_modAppealUid=null;
+  loadModAppeals();
+}
+
+/* ── BANNED USERS (MOD) ── */
+let _modBanned=[],_modBannedF=[];
+function renderBannedMod(list){
+  const el=document.getElementById('banned-list');if(!el)return;
+  if(!list.length){el.innerHTML='<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No banned users</div><div class="empty-sub">No users are currently banned.</div></div>';return;}
+  el.innerHTML=list.map(u=>{
+    const sn=esc(u.full_name).replace(/"/g,'&quot;');
+    const pc=S.posts.filter(p=>p.user_id===u.id).length;
+    return`<div class="ur">
+      <div class="ur-av" style="background:${u.color||clr(u.id)}">${ini(u.full_name)}</div>
+      <div class="ur-info">
+        <div class="ur-nm">${esc(u.full_name)} <span class="bdg ban" style="font-size:9px">Banned</span></div>
+        <div class="ur-sub"><i class="fa fa-map-marker-alt" style="font-size:10px"></i> ${esc(u.city||'—')} · ${pc} posts · Joined ${ago(u.joined_at)}</div>
+      </div>
+      <div class="ur-acts">
+        <button class="urb unban" onclick="modUnban('${u.id}','${sn}',this)"><i class="fa fa-unlock"></i> Unban</button>
+        <button class="urb wrn" onclick="openWarn('${u.id}','${sn}')"><i class="fa fa-exclamation-circle"></i> Warn</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function sbanned(q){
+  _modBannedF=q?_modBanned.filter(u=>(u.full_name||'').toLowerCase().includes(q.toLowerCase())||(u.city||'').toLowerCase().includes(q.toLowerCase())):_modBanned;
+  renderBannedMod(_modBannedF);
+}
+async function modUnban(uid,name,btn){
+  if(!confirm('Unban '+name+'?'))return;
+  btn.disabled=true;btn.textContent='…';
+  const{ok,error}=await adminUpdate('profiles',{banned:false},'id',uid,'banned');
+  if(!ok){toast('❌ '+error,'e');btn.disabled=false;btn.textContent='Unban';return;}
+  const u=S.users.find(u=>u.id===uid);if(u)u.banned=false;
+  S.fu=[...S.users];
+  _modBanned=_modBanned.filter(u=>u.id!==uid);
+  _modBannedF=_modBannedF.filter(u=>u.id!==uid);
+  renderBannedMod(_modBannedF);
+  renderUsers();
+  const cnt=document.getElementById('tc-bn');if(cnt)cnt.textContent=_modBanned.length||0;
+  addLog('Unban',name);
+  toast('✅ '+name+' unbanned','s');
+}
+
+/* ── AUTO SESSION ── */
+(async()=>{
+  const{data:{session}}=await db.auth.getSession();
+  if(session?.user){
+    const{data:prof}=await db.from('profiles').select('*').eq('id',session.user.id).single();
+    if(prof&&(prof.role==='moderator'||prof.role==='admin')&&!prof.banned){
+      S.user=session.user;S.profile=prof;
+      const av=document.getElementById('tb-av');av.textContent=ini(prof.full_name||'M');av.style.background=prof.color||'#311B92';
+      document.getElementById('tb-nm').textContent=(prof.full_name||'').split(' ')[0];
+      document.getElementById('auth-wrap').classList.add('gone');
+      document.getElementById('app').classList.add('on');
+      await loadAll();
+      startModRealtime();
+    }
+  }
+})();
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeM('m-del');closeM('m-warn');closeM('m-ban');closeM('m-support-reply');closeM('m-appeal-reply')}});
+</script>
+
+</body>
+</html>
